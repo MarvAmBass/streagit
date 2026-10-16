@@ -187,17 +187,29 @@ pub fn peel_ref(repo: &gix::Repository, name: &str) -> anyhow::Result<Option<Obj
     }
 }
 
-/// Resolve a shorthand (`main`, `v1.0`) under `refs/heads/` then `refs/tags/`.
-pub fn resolve_shorthand(repo: &gix::Repository, short: &str) -> anyhow::Result<Option<ObjectId>> {
-    if short.is_empty() || short.contains("..") || short.starts_with('/') || short.contains('\0') {
-        return Ok(None);
+/// Resolve a user-supplied shorthand (`main`, `v1.0`) under `refs/heads/` then
+/// `refs/tags/`. Anything that cannot be looked up (invalid name, a name longer
+/// than the file system allows, ...) is simply "not found".
+pub fn resolve_shorthand(repo: &gix::Repository, short: &str) -> Option<ObjectId> {
+    if short.is_empty()
+        || short.len() > 512
+        || short.contains("..")
+        || short.starts_with('/')
+        || short.contains('\0')
+    {
+        return None;
     }
     for prefix in ["refs/heads/", "refs/tags/"] {
-        if let Some(id) = peel_ref(repo, &format!("{prefix}{short}"))? {
-            return Ok(Some(id));
+        let Ok(Some(mut r)) = repo.try_find_reference(&format!("{prefix}{short}")) else {
+            continue;
+        };
+        if let Ok(id) = r.peel_to_id() {
+            if is_commit(repo, id.detach()) {
+                return Some(id.detach());
+            }
         }
     }
-    Ok(None)
+    None
 }
 
 pub fn is_commit(repo: &gix::Repository, id: ObjectId) -> bool {

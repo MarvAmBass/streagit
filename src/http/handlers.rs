@@ -110,6 +110,8 @@ pub enum Page {
     Raw(Vec<Vec<u8>>),
 }
 
+/// `from` / `ref` query values. `None` for a query that is too long or carries a
+/// value that is not a plain, decodable path segment (the page is then 404).
 fn parse_query(q: Option<&str>) -> Option<(Option<String>, Option<String>)> {
     let Some(q) = q else {
         return Some((None, None));
@@ -123,13 +125,15 @@ fn parse_query(q: Option<&str>) -> Option<(Option<String>, Option<String>)> {
             continue;
         }
         let (k, v) = kv.split_once('=').unwrap_or((kv, ""));
+        if !matches!(k, "from" | "ref") {
+            continue;
+        }
         let v = super::resolve::decode_segment(v)
             .ok()
-            .and_then(|b| String::from_utf8(b).ok());
+            .and_then(|b| String::from_utf8(b).ok())?;
         match k {
-            "from" => from = v,
-            "ref" => reference = v,
-            _ => {}
+            "from" => from = Some(v),
+            _ => reference = Some(v),
         }
     }
     Some((from, reference))
@@ -172,10 +176,14 @@ pub fn is_oid(s: &str) -> bool {
 }
 
 type RenderFn = Box<dyn FnOnce(&mut dyn Out) -> Result<(), RenderError> + Send>;
+type LoadFn = Box<dyn FnOnce() -> anyhow::Result<(Bytes, &'static str)> + Send>;
 
 enum Body_ {
+    /// Streamed page, rendered under a render permit.
     Render(RenderFn),
-    Raw(Bytes),
+    /// Whole body loaded under a render permit (raw blobs: bounded memory,
+    /// content type known only after loading).
+    Deferred(LoadFn),
 }
 
 /// Everything about a page that is known before rendering (headers, cache key).
@@ -284,9 +292,8 @@ fn prepare(state: &Arc<AppState>, resolved: &Resolved, page: &Page) -> Result<Pr
         Page::Log { from, reference } => {
             let (start_tip, suffix) = match reference {
                 Some(name) => match resolve_shorthand(&repo, name) {
-                    Ok(Some(id)) => (Some(id), format!("&ref={}", pct_str(name))),
-                    Ok(None) => return Err(nf("ref not found", ctx)),
-                    Err(e) => return Err(PageError::Internal(e, Some(Box::new(ctx)))),
+                    Some(id) => (Some(id), format!("&ref={}", pct_str(name))),
+                    None => return Err(nf("ref not found", ctx)),
                 },
                 None => (tip, String::new()),
             };
@@ -333,17 +340,17 @@ fn prepare(state: &Arc<AppState>, resolved: &Resolved, page: &Page) -> Result<Pr
         Page::Commit(hex) => {
             let id = ObjectId::from_hex(hex.as_bytes())
                 .map_err(|_| nf("commit not found", ctx.clone()))?;
-            let last_modified = match repo.find_object(id) {
-                Ok(o) if o.kind == gix::object::Kind::Commit => {
-                    let c = o.into_commit();
-                    c.committer()
-                        .ok()
-                        .map(|c| crate::git::commit::parse_time(c.time.as_ref()).0)
-                }
+            // header only: the id may name a huge blob, which must not be loaded
+            match repo.try_find_header(id) {
+                Ok(Some(h)) if h.kind() == gix::object::Kind::Commit => {}
                 Ok(_) => return Err(nf("commit not found", ctx)),
-                Err(e) if e.is_not_found() => return Err(nf("commit not found", ctx)),
                 Err(e) => return Err(PageError::Internal(e.into(), Some(Box::new(ctx)))),
-            };
+            }
+            let last_modified = repo.find_commit(id).ok().and_then(|c| {
+                c.committer()
+                    .ok()
+                    .map(|c| crate::git::commit::parse_time(c.time.as_ref()).0)
+            });
             let deadline = Instant::now() + timeout;
             ctx.deadline = deadline;
             Ok(Prepared {
@@ -388,37 +395,37 @@ fn prepare(state: &Arc<AppState>, resolved: &Resolved, page: &Page) -> Result<Pr
             let id = entry.id;
             let deadline = Instant::now() + timeout;
             ctx.deadline = deadline;
+            // gix materialises whole objects: refuse blobs that would not fit the
+            // per-render memory budget before anything is loaded
+            let size = repo
+                .find_header(id)
+                .map(|h| h.size())
+                .map_err(|e| PageError::Internal(e.into(), Some(Box::new(ctx.clone()))))?;
+            if size > state.cfg.max_commit_diff_bytes {
+                return Err(PageError::TooLarge(
+                    format!("file too large ({size} bytes)"),
+                    Some(Box::new(ctx)),
+                ));
+            }
             if matches!(page, Page::Raw(_)) {
-                let size = repo
-                    .find_header(id)
-                    .map(|h| h.size())
-                    .map_err(|e| PageError::Internal(e.into(), Some(Box::new(ctx.clone()))))?;
-                if size > state.cfg.max_commit_diff_bytes {
-                    return Err(PageError::TooLarge(
-                        format!("file too large ({size} bytes)"),
-                        Some(Box::new(ctx)),
-                    ));
-                }
-                let data = repo
-                    .find_object(id)
-                    .map_err(|e| PageError::Internal(e.into(), Some(Box::new(ctx.clone()))))?
-                    .data
-                    .clone();
-                let ct = if is_binary(&data) {
-                    "application/octet-stream"
-                } else {
-                    "text/plain; charset=utf-8"
-                };
                 return Ok(Prepared {
                     head: PageHead {
                         key: format!("{rh}:raw:{id}"),
                         etag: format!("\"{id}\""),
-                        content_type: ct,
+                        content_type: "application/octet-stream",
                         cache_control: "public, max-age=60, must-revalidate",
                         last_modified: None,
                         deadline,
                     },
-                    body: Body_::Raw(Bytes::from(data)),
+                    body: Body_::Deferred(Box::new(move || {
+                        let data = repo.find_object(id)?.data.clone();
+                        let ct = if is_binary(&data) {
+                            "application/octet-stream"
+                        } else {
+                            "text/plain; charset=utf-8"
+                        };
+                        Ok((Bytes::from(data), ct))
+                    })),
                 });
             }
             let ph = xxhash_rust::xxh3::xxh3_64(&full_path);
@@ -552,6 +559,32 @@ fn text(status: StatusCode, body: &'static str, ct: &'static str) -> Response<Bo
     r.headers_mut()
         .insert(header::CONTENT_TYPE, HeaderValue::from_static(ct));
     r
+}
+
+/// A render permit: immediately if free, otherwise after waiting at most
+/// `queue_timeout` with at most `max_queue` other waiters; `None` means 503.
+async fn acquire_permit(state: &AppState) -> Option<tokio::sync::OwnedSemaphorePermit> {
+    if let Ok(p) = state.permits.clone().try_acquire_owned() {
+        return Some(p);
+    }
+    if state.waiting.load(Ordering::Relaxed) >= state.cfg.max_queue {
+        state.metrics.queue_drops.fetch_add(1, Ordering::Relaxed);
+        return None;
+    }
+    state.waiting.fetch_add(1, Ordering::Relaxed);
+    let permit = tokio::time::timeout(
+        state.cfg.queue_timeout,
+        state.permits.clone().acquire_owned(),
+    )
+    .await;
+    state.waiting.fetch_sub(1, Ordering::Relaxed);
+    match permit {
+        Ok(Ok(p)) => Some(p),
+        _ => {
+            state.metrics.queue_drops.fetch_add(1, Ordering::Relaxed);
+            None
+        }
+    }
 }
 
 fn metrics_text(state: &AppState) -> String {
@@ -737,7 +770,36 @@ pub async fn handle(State(state): State<Arc<AppState>>, req: Request) -> Respons
     }
     let is_head = method == Method::HEAD;
     let render = match body {
-        Body_::Raw(b) => return full_response(&head, b, is_head),
+        Body_::Deferred(load) => {
+            // whole-body pages (raw blobs): loaded under a permit, never cached
+            let Some(permit) = acquire_permit(&state).await else {
+                return overloaded();
+            };
+            let loaded = tokio::task::spawn_blocking(move || {
+                let _permit = permit;
+                load()
+            })
+            .await;
+            return match loaded {
+                Ok(Ok((bytes, content_type))) => {
+                    let head = PageHead {
+                        content_type,
+                        ..head
+                    };
+                    full_response(&head, bytes, is_head)
+                }
+                Ok(Err(e)) => {
+                    state.metrics.errors.fetch_add(1, Ordering::Relaxed);
+                    tracing::error!(error = format!("{e:#}"), path, "load failed");
+                    plain_page(StatusCode::INTERNAL_SERVER_ERROR, "repository error")
+                }
+                Err(e) => {
+                    state.metrics.errors.fetch_add(1, Ordering::Relaxed);
+                    tracing::error!(error = %e, path, "load panicked");
+                    plain_page(StatusCode::INTERNAL_SERVER_ERROR, "internal error")
+                }
+            };
+        }
         Body_::Render(f) => f,
     };
     // phase 3: render cache
@@ -761,28 +823,8 @@ pub async fn handle(State(state): State<Arc<AppState>>, req: Request) -> Respons
         }
     };
     // phase 5: render permit (at most `max_queue` requests wait, at most `queue_timeout`)
-    let permit = match state.permits.clone().try_acquire_owned() {
-        Ok(p) => p,
-        Err(_) => {
-            if state.waiting.load(Ordering::Relaxed) >= state.cfg.max_queue {
-                state.metrics.queue_drops.fetch_add(1, Ordering::Relaxed);
-                return overloaded();
-            }
-            state.waiting.fetch_add(1, Ordering::Relaxed);
-            let permit = tokio::time::timeout(
-                state.cfg.queue_timeout,
-                state.permits.clone().acquire_owned(),
-            )
-            .await;
-            state.waiting.fetch_sub(1, Ordering::Relaxed);
-            match permit {
-                Ok(Ok(p)) => p,
-                _ => {
-                    state.metrics.queue_drops.fetch_add(1, Ordering::Relaxed);
-                    return overloaded();
-                }
-            }
-        }
+    let Some(permit) = acquire_permit(&state).await else {
+        return overloaded();
     };
     if Instant::now() >= head.deadline {
         return overloaded();
