@@ -312,15 +312,16 @@ fn prepare(state: &Arc<AppState>, resolved: &Resolved, page: &Page) -> Result<Pr
                 .map(|t| t.to_string())
                 .unwrap_or_else(|| "empty".to_string());
             let from_s = from_id.map(|t| t.to_string()).unwrap_or_default();
-            let key = format!(
-                "{rh}:log:{start_s}:{from_s}:{n}:{}",
-                reference.as_deref().unwrap_or("")
+            let ref_s = reference.as_deref().unwrap_or("");
+            let key = format!("{rh}:log:{start_s}:{from_s}:{n}:{ref_s}");
+            // the ref name is part of the page (pagination links), not only its tip
+            let ref_h = format!(
+                "{:08x}",
+                xxhash_rust::xxh3::xxh3_64(ref_s.as_bytes()) as u32
             );
-            let etag = format!("\"{start_s}-{from_s}-{n}-{tv}\"");
+            let etag = format!("\"{start_s}-{from_s}-{n}-{ref_h}-{tv}\"");
             let deadline = Instant::now() + timeout * 2;
             ctx.deadline = deadline;
-            let start = from_id.or(start_tip);
-            let is_from = from_id.is_some();
             Ok(Prepared {
                 head: PageHead {
                     key,
@@ -332,7 +333,7 @@ fn prepare(state: &Arc<AppState>, resolved: &Resolved, page: &Page) -> Result<Pr
                 },
                 body: Body_::Render(Box::new(move |out| {
                     crate::render::log::render_log(
-                        &repo, &ctx, &st.stats, start, is_from, &suffix, out,
+                        &repo, &ctx, &st.stats, start_tip, from_id, &suffix, out,
                     )
                 })),
             })

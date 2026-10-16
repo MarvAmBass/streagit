@@ -46,25 +46,28 @@ pub fn write_log_row(out: &mut dyn Out, r: &str, info: &CommitInfo, s: Stats) ->
     )
 }
 
-/// Render the log page starting at `start` (the tip, or `?from=`), `page_size` rows.
-/// `query_suffix` is appended to pagination links (`&ref=name`).
+/// Render the log page of the walk from `tip` (HEAD or `?ref=`), `page_size` rows,
+/// starting at `from` (`?from=`) if given. `query_suffix` is appended to
+/// pagination links (`&ref=name`).
 pub fn render_log(
     repo: &gix::Repository,
     ctx: &Ctx,
     stats: &StatsCache,
-    start: Option<ObjectId>,
-    is_from: bool,
+    tip: Option<ObjectId>,
+    from: Option<ObjectId>,
     query_suffix: &str,
     out: &mut dyn Out,
 ) -> R {
     write_header(out, ctx, b"Log")?;
     out.write(b"<table id=\"log\"><thead>\n<tr><td><b>Date</b></td><td><b>Commit message</b></td><td><b>Author</b></td><td class=\"num\" align=\"right\"><b>Files</b></td><td class=\"num\" align=\"right\"><b>+</b></td><td class=\"num\" align=\"right\"><b>-</b></td></tr>\n</thead><tbody>\n")?;
     let n = ctx.page_size;
-    let ids = match start {
-        Some(s) => crate::git::log::walk(repo, s, n + 1, || ctx.check())?,
-        None => Vec::new(),
+    let ids = match (tip, from) {
+        (Some(t), Some(f)) => crate::git::log::walk_from(repo, t, f, n + 1, || ctx.check())?,
+        (Some(t), None) => crate::git::log::walk(repo, t, n + 1, || ctx.check())?,
+        (None, _) => Vec::new(),
     };
-    if is_from {
+    let start = from.or(tip);
+    if from.is_some() {
         let sep = if query_suffix.is_empty() { "" } else { "?" };
         w!(out, "<tr><td></td><td colspan=\"5\"><a href=\"log.html{sep}{}\">&uarr; newest</a></td></tr>\n", query_suffix.trim_start_matches('&'))?;
     }

@@ -11,6 +11,7 @@
 #   github.com/alice/repos/html/repo.git            a repo literally named "html"
 #   github.com/alice/repos/empty/repo.git           no commits at all
 #   github.com/alice/gists/abc123/repo.git          gist
+#   github.com/alice/repos/paging/repo.git          merge topology that breaks naive ?from= paging
 #   github.com/carol/stars/alice/fixture            symlink -> ../../../alice/repos/fixture
 #   github.com/alice/repos/evil/repo.git            symlink escaping the root (must be refused)
 set -eu
@@ -313,6 +314,40 @@ mkdir -p "$ROOT/github.com/alice/gists/abc123"
 git clone -q --bare --no-hardlinks "$WORK/gist" "$ROOT/github.com/alice/gists/abc123/repo.git"
 git -C "$ROOT/github.com/alice/gists/abc123/repo.git" symbolic-ref HEAD refs/heads/main
 meta "$ROOT/github.com/alice/gists/abc123/repo.git" "A gist" "https://gist.github.com/abc123" "alice"
+
+# paging: a history where a date-ordered walk pops a branch whose exclusive
+# ancestors are older than the other branch's commits. Walk from main:
+#   M2 M1 x2 y2 y1 x1 base
+# A page ending at x2 whose next page restarted the walk at y2 alone would
+# never show x1 (only reachable through x2).
+git_init "$WORK/paging"
+cd "$WORK/paging"
+printf 'base\n' > f
+git add f
+c -m "base"
+git checkout -q -b x
+printf 'x1\n' >> f
+git add f
+c -m "x1"
+git checkout -q main
+git checkout -q -b y
+printf 'y1\n' > g
+git add g
+c -m "y1"
+printf 'y2\n' >> g
+git add g
+c -m "y2"
+git checkout -q x
+printf 'x2\n' >> f
+git add f
+c -m "x2"
+git checkout -q main
+T=$((T + 3600)); GIT_AUTHOR_DATE="@$T +0100" GIT_COMMITTER_DATE="@$T +0100" git merge -q --no-ff -m "merge x" x
+T=$((T + 3600)); GIT_AUTHOR_DATE="@$T +0100" GIT_COMMITTER_DATE="@$T +0100" git merge -q --no-ff -m "merge y" y
+mkdir -p "$ROOT/github.com/alice/repos/paging"
+git clone -q --bare --no-hardlinks "$WORK/paging" "$ROOT/github.com/alice/repos/paging/repo.git"
+git -C "$ROOT/github.com/alice/repos/paging/repo.git" symbolic-ref HEAD refs/heads/main
+meta "$ROOT/github.com/alice/repos/paging/repo.git" "Paging" "https://github.com/alice/paging" "alice"
 
 # star view symlink (inside the root) and an escaping symlink
 mkdir -p "$ROOT/github.com/carol/stars/alice"

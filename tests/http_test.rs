@@ -294,6 +294,98 @@ async fn log_paging_covers_the_whole_history() {
         .contains("<td class=\"num\" align=\"right\">1</td><td class=\"num\" align=\"right\">+"));
 }
 
+/// Follow `Next` links from page 1 and return every commit id in order.
+async fn page_through(app: &axum::Router, base: &str) -> Vec<String> {
+    let mut seen = Vec::new();
+    let mut url = format!("{base}/log.html");
+    for _ in 0..1000 {
+        let r = get(app, &url).await;
+        assert_html(&r);
+        let t = r.text();
+        seen.extend(
+            t.match_indices("<a href=\"commit/")
+                .map(|(i, _)| t[i + 16..i + 56].to_string()),
+        );
+        match t.find("log.html?from=") {
+            Some(i) => url = format!("{base}/log.html?from={}", &t[i + 14..i + 54]),
+            None => return seen,
+        }
+    }
+    panic!("paging never ends");
+}
+
+#[tokio::test]
+async fn log_paging_is_continuous_across_merges() {
+    // the walk pops `x2` before `y2`, `y1`; `x1` is only reachable through `x2`.
+    // A page boundary anywhere in between must not lose it.
+    let expected: Vec<String> = git_in(
+        "github.com/alice/repos/paging/repo.git",
+        &["log", "--format=%H", "main"],
+    )
+    .lines()
+    .map(str::to_string)
+    .collect();
+    assert_eq!(expected.len(), 7);
+    for page_size in 1..=7 {
+        let mut cfg = config();
+        cfg.page_size = page_size;
+        let (app, _) = app_with(cfg);
+        let seen = page_through(&app, "/browse/github.com/alice/repos/paging/html").await;
+        assert_eq!(seen, expected, "page size {page_size}");
+    }
+    // a ?from= that is not reachable from the tip still renders (starting there)
+    let x1 = &expected[5];
+    let r = get(
+        &app().0,
+        &format!("/browse/github.com/alice/repos/paging/html/log.html?from={x1}"),
+    )
+    .await;
+    assert_html(&r);
+    assert!(r.text().contains(&format!("commit/{x1}.html")));
+}
+
+#[tokio::test]
+async fn bad_ids_and_names_are_not_found() {
+    let (app, _) = app();
+    let base = "/browse/github.com/alice/repos/fixture/html";
+    let blob = git(&["rev-parse", "main:README.md"]);
+    let tree = git(&["rev-parse", "main^{tree}"]);
+    for path in [
+        format!("{base}/log.html?ref={}", "a".repeat(1000)),
+        format!("{base}/log.html?ref=refs/heads/main"),
+        format!("{base}/log.html?ref=..%2F..%2Fconfig"),
+        format!("{base}/log.html?from="),
+        format!("{base}/log.html?from=..%2F..%2Fetc%2Fpasswd"),
+        format!("{base}/log.html?from={}", blob.trim()),
+        format!("{base}/commit/{}.html", blob.trim()),
+        format!("{base}/commit/{}.html", tree.trim()),
+    ] {
+        let r = get(&app, &path).await;
+        assert_eq!(r.status, StatusCode::NOT_FOUND, "{path}\n{}", r.text());
+    }
+}
+
+#[tokio::test]
+async fn oversized_blobs_are_refused_before_loading() {
+    let mut cfg = config();
+    cfg.max_commit_diff_bytes = 1000;
+    let (app, _) = app_with(cfg);
+    let base = "/browse/github.com/alice/repos/fixture/html";
+    for path in [
+        format!("{base}/file/big.txt.html"),
+        format!("{base}/raw/big.txt"),
+    ] {
+        let r = get(&app, &path).await;
+        assert_eq!(r.status, StatusCode::PAYLOAD_TOO_LARGE, "{path}");
+        assert!(r.text().contains("file too large ("), "{}", r.text());
+    }
+    let r = get(&app, &format!("{base}/file/README.md.html")).await;
+    assert_html(&r);
+    let r = get(&app, &format!("{base}/raw/README.md")).await;
+    assert_eq!(r.status, StatusCode::OK);
+    assert_eq!(r.header("content-type"), Some("text/plain; charset=utf-8"));
+}
+
 #[tokio::test]
 async fn log_of_a_ref() {
     let (app, _) = app();
@@ -843,7 +935,7 @@ async fn render_timeout_notice() {
     ctx.deadline = std::time::Instant::now() - std::time::Duration::from_secs(1);
     let stats = streagit::cache::stats::StatsCache::new(10);
     let mut out = VecOut::default();
-    let err = streagit::render::log::render_log(&repo, &ctx, &stats, tip, false, "", &mut out)
+    let err = streagit::render::log::render_log(&repo, &ctx, &stats, tip, None, "", &mut out)
         .unwrap_err();
     assert!(matches!(err, RenderError::Timeout));
     // the header was already written when the deadline hit
