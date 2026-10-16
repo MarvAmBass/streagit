@@ -50,11 +50,11 @@ impl RenderCache {
             return false;
         }
         let mut g = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(old) = g.map.pop(&key) {
+        g.bytes += body.len();
+        // `push` reports both a replaced value and an entry evicted by the count limit
+        if let Some((_, old)) = g.map.push(key, body) {
             g.bytes -= old.len();
         }
-        g.bytes += body.len();
-        g.map.put(key, body);
         while g.bytes > self.max_bytes {
             match g.map.pop_lru() {
                 Some((_, v)) => g.bytes -= v.len(),
@@ -87,5 +87,15 @@ mod tests {
         assert!(!c.put("big".into(), Bytes::from(vec![0u8; 61])));
         let (n, bytes, _, _) = c.stats();
         assert_eq!((n, bytes), (2, 100));
+    }
+
+    #[test]
+    fn count_limit_evictions_keep_the_byte_accounting_exact() {
+        let c = RenderCache::new(1 << 20, 3, 1 << 20);
+        for i in 0..100 {
+            assert!(c.put(format!("k{i}"), Bytes::from(vec![0u8; 10])));
+        }
+        let (n, bytes, _, _) = c.stats();
+        assert_eq!((n, bytes), (3, 30));
     }
 }

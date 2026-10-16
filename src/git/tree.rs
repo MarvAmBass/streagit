@@ -39,6 +39,9 @@ pub fn mode_string(mode: u16, kind: EntryKind) -> String {
     s
 }
 
+/// Directory nesting beyond which `list_files` stops descending.
+pub const MAX_DEPTH: usize = 256;
+
 /// Recursive, depth-first listing in tree order; directories are not listed.
 /// Stops after `max` entries and reports whether more were available.
 pub fn list_files(
@@ -72,6 +75,12 @@ fn walk(
     check: &mut impl FnMut() -> Result<(), crate::render::out::RenderError>,
 ) -> Result<(), crate::render::out::RenderError> {
     check()?;
+    // the recursion runs on a render thread with a fixed stack; a tree nested
+    // deeper than any sane repository is cut off rather than overflowing it
+    if prefix.iter().filter(|&&c| c == b'/').count() >= MAX_DEPTH {
+        *truncated = true;
+        return Ok(());
+    }
     let tree = repo.find_tree(tree_id).map_err(anyhow::Error::from)?;
     let mut entries = Vec::new();
     for e in tree.iter() {
