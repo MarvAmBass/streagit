@@ -455,9 +455,9 @@ fn prepare(state: &Arc<AppState>, resolved: &Resolved, page: &Page) -> Result<Pr
                     deadline,
                 },
                 body: Body_::Render(Box::new(move |out| {
-                    let refs = crate::git::refs::list_refs(&repo)?;
+                    let refs = crate::git::refs::list_refs(&repo, || ctx.check())?;
                     if is_tags {
-                        crate::render::atom::render_tags(&ctx, &refs, out)
+                        crate::render::atom::render_tags(&repo, &ctx, &refs, out)
                     } else {
                         crate::render::refs::render_refs(&ctx, &refs, out)
                     }

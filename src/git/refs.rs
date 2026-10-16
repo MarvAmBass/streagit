@@ -1,19 +1,30 @@
 //! Branches and tags with their peeled commit (SPEC §4.8).
 
+use std::collections::HashMap;
+
 use gix::ObjectId;
 
-use super::commit::Sig;
+use super::commit::{CommitInfo, Sig};
+use crate::render::out::RenderError;
 
+/// One branch or tag row. Only what refs.html needs is kept: a repository with
+/// tens of thousands of tags must not retain a commit message per ref (tags.xml
+/// loads the commits of its top entries on demand, `commit_info`).
 #[derive(Debug, Clone)]
 pub struct RefInfo {
     /// Shorthand name (`main`, `v1.0`).
     pub name: Vec<u8>,
+    /// The peeled commit.
     pub id: ObjectId,
     pub author: Option<Sig>,
-    pub committer: Option<Sig>,
-    pub summary: Vec<u8>,
-    pub message: Vec<u8>,
-    pub parent: Option<ObjectId>,
+}
+
+impl RefInfo {
+    /// Full commit data for feed entries.
+    pub fn commit_info(&self, repo: &gix::Repository) -> anyhow::Result<CommitInfo> {
+        let commit = repo.find_commit(self.id)?;
+        CommitInfo::from_commit(&commit)
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -42,42 +53,71 @@ pub fn refs_hash(repo: &gix::Repository) -> anyhow::Result<u64> {
     Ok(h.digest())
 }
 
+/// Peel `id` to a commit and return it with its author; `None` if it peels to
+/// something else (tree, blob) or cannot be read. Only object *headers* are inspected
+/// until a tag object has to be followed: gix's `peeled()` iterator would load
+/// the whole target object for every ref, which is prohibitive with tens of
+/// thousands of lightweight tags (or a tag on a huge blob).
+fn peel_to_commit(repo: &gix::Repository, mut id: ObjectId) -> Option<(ObjectId, Option<Sig>)> {
+    for _ in 0..16 {
+        match repo.try_find_header(id) {
+            Ok(Some(h)) if h.kind() == gix::object::Kind::Commit => {
+                let commit = repo.find_commit(id).ok()?;
+                return Some((id, commit.author().ok().map(|a| Sig::from_ref(&a))));
+            }
+            Ok(Some(h)) if h.kind() == gix::object::Kind::Tag => {
+                let tag = repo.find_tag(id).ok()?;
+                id = tag.target_id().ok()?.detach();
+            }
+            _ => return None,
+        }
+    }
+    None
+}
+
 /// Collect branches and tags, peeled to commits, sorted like stagit:
-/// author time descending, then name ascending.
-pub fn list_refs(repo: &gix::Repository) -> anyhow::Result<Refs> {
-    let platform = repo.references()?;
+/// author time descending, then name ascending. `check` (the render deadline)
+/// is called every few hundred refs.
+pub fn list_refs(
+    repo: &gix::Repository,
+    mut check: impl FnMut() -> Result<(), RenderError>,
+) -> Result<Refs, RenderError> {
+    let platform = repo.references().map_err(anyhow::Error::from)?;
     let mut out = Refs::default();
+    // many refs usually point at the same few commits (release tags, branches);
+    // keyed by the unpeeled target so that annotated tags are peeled once too
+    let mut peeled: HashMap<ObjectId, Option<(ObjectId, Option<Sig>)>> = HashMap::new();
     for (iter, is_tag) in [
-        (platform.local_branches()?, false),
-        (platform.tags()?, true),
+        (
+            platform.local_branches().map_err(anyhow::Error::from)?,
+            false,
+        ),
+        (platform.tags().map_err(anyhow::Error::from)?, true),
     ] {
-        let iter = iter.peeled()?;
-        for r in iter {
-            let r = r?;
-            let Some(id) = r.target().try_id().map(|i| i.to_owned()) else {
-                continue;
+        for (i, r) in iter.enumerate() {
+            if i % 256 == 0 {
+                check()?;
+            }
+            let r = r.map_err(anyhow::Error::from)?;
+            let name = r.name().shorten().to_vec();
+            let raw = r.inner;
+            // `packed-refs` carries the peeled commit of annotated tags (`^` lines)
+            let target = match raw
+                .peeled
+                .or_else(|| raw.target.try_id().map(ToOwned::to_owned))
+            {
+                Some(id) => id,
+                None => continue, // symbolic ref
             };
             // stagit stops at the first tag that peels to a non-commit; we skip it
-            let Ok(obj) = repo.find_object(id) else {
+            let Some((id, author)) = peeled
+                .entry(target)
+                .or_insert_with(|| peel_to_commit(repo, target))
+                .clone()
+            else {
                 continue;
             };
-            if obj.kind != gix::object::Kind::Commit {
-                continue;
-            }
-            let commit = obj.into_commit();
-            let Ok(info) = super::commit::CommitInfo::from_commit(&commit) else {
-                continue;
-            };
-            let name = r.name().shorten().to_vec();
-            let ri = RefInfo {
-                name,
-                id,
-                author: info.author,
-                committer: info.committer,
-                summary: info.summary,
-                message: info.message,
-                parent: info.parent,
-            };
+            let ri = RefInfo { name, id, author };
             if is_tag {
                 out.tags.push(ri);
             } else {

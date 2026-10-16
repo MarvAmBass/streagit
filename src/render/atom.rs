@@ -73,19 +73,11 @@ pub fn render_atom(
     out.write(b"</feed>\n")
 }
 
-pub fn render_tags(ctx: &Ctx, refs: &Refs, out: &mut dyn Out) -> R {
+pub fn render_tags(repo: &gix::Repository, ctx: &Ctx, refs: &Refs, out: &mut dyn Out) -> R {
     write_feed_head(out, ctx)?;
     for r in refs.tags.iter().take(ctx.feed_entries) {
         ctx.check()?;
-        let info = CommitInfo {
-            id: r.id,
-            tree: r.id,
-            parent: r.parent,
-            author: r.author.clone(),
-            committer: r.committer.clone(),
-            summary: r.summary.clone(),
-            message: r.message.clone(),
-        };
+        let info = r.commit_info(repo)?;
         write_entry(out, ctx, &info, Some(&r.name))?;
     }
     out.write(b"</feed>\n")
