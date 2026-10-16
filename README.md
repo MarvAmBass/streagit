@@ -160,7 +160,7 @@ container), repository on the container file system:
 
 | | time |
 |---|---|
-| stagit 1.3: full render, all 3,506 commit pages + 432 file pages (162 MB) | **8.0 s** |
+| stagit 1.3: full render, all 3,506 commit pages + 432 file pages (162 MB) | **7–8 s** |
 | streagit: `log.html` (100 rows, 100 diffs, cold) | 49 ms |
 | streagit: `log.html` (cached) | < 1 ms |
 | streagit: `log.html` with `If-None-Match` (304) | < 1 ms |

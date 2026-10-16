@@ -795,7 +795,9 @@ pub async fn handle(State(state): State<Arc<AppState>>, req: Request) -> Respons
     let max_keep = state.render_cache.max_entry;
     let path_for_log = path.clone();
     state.metrics.renders.fetch_add(1, Ordering::Relaxed);
-    tokio::task::spawn_blocking(move || {
+    let path_for_panic = path.clone();
+    let st_for_panic = state.clone();
+    let task = tokio::task::spawn_blocking(move || {
         let _permit = permit;
         let started = Instant::now();
         let mut out = ChunkOut::new(tx, max_keep);
@@ -834,6 +836,14 @@ pub async fn handle(State(state): State<Arc<AppState>>, req: Request) -> Respons
         }
         if let Some(l) = leader {
             l.finish(outcome);
+        }
+    });
+    // a panicking render drops the sender (the stream just ends) and the leader
+    // (followers render themselves); log it so it does not go unnoticed
+    tokio::spawn(async move {
+        if let Err(e) = task.await {
+            st_for_panic.metrics.errors.fetch_add(1, Ordering::Relaxed);
+            tracing::error!(path = path_for_panic, error = %e, "render task panicked");
         }
     });
     r
