@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+<title>repo, branch HEAD</title>
+<subtitle>Fixture repository &amp; more
+</subtitle>
+<entry>
+<id>d6af2bc7da88de0f9a9c763a173d2f7dc62587bc</id>
+<published>2023-11-16T12:13:21Z</published>
+<updated>2023-11-16T12:13:21Z</updated>
+<title>[v1.0] Edit big.txt in several places</title>
+<link rel="alternate" type="text/html" href="commit/d6af2bc7da88de0f9a9c763a173d2f7dc62587bc.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit d6af2bc7da88de0f9a9c763a173d2f7dc62587bc
+parent e8e8ed604d57c886006d9c50c614a26bbb26c291
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Thu, 16 Nov 2023 13:13:21 +0100
+
+Edit big.txt in several places
+
+</content>
+</entry>
+<entry>
+<id>6cb179380a1899a4fa4be7b4f1ec2771e6397205</id>
+<published>2023-11-15T09:13:20Z</published>
+<updated>2023-11-15T09:13:20Z</updated>
+<title>[v0.1-light] Add big file</title>
+<link rel="alternate" type="text/html" href="commit/6cb179380a1899a4fa4be7b4f1ec2771e6397205.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 6cb179380a1899a4fa4be7b4f1ec2771e6397205
+parent bcb80f4b16c1434fe180ddb7cd13a0222e293e71
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 10:13:20 +0100
+
+Add big file
+
+</content>
+</entry>
+<entry>
+<id>bcb80f4b16c1434fe180ddb7cd13a0222e293e71</id>
+<published>2023-11-15T08:13:20Z</published>
+<updated>2023-11-15T08:13:20Z</updated>
+<title>[v0.1] Modify binary file</title>
+<link rel="alternate" type="text/html" href="commit/bcb80f4b16c1434fe180ddb7cd13a0222e293e71.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit bcb80f4b16c1434fe180ddb7cd13a0222e293e71
+parent 5eac5c2a4699933561787cef09c56312cf5dc9a6
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 09:13:20 +0100
+
+Modify binary file
+
+</content>
+</entry>
+</feed>

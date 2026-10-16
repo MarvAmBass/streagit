@@ -1,0 +1,731 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+<title>repo, branch HEAD</title>
+<subtitle>Fixture repository &amp; more
+</subtitle>
+<entry>
+<id>d6af2bc7da88de0f9a9c763a173d2f7dc62587bc</id>
+<published>2023-11-16T12:13:21Z</published>
+<updated>2023-11-16T12:13:21Z</updated>
+<title>Edit big.txt in several places</title>
+<link rel="alternate" type="text/html" href="commit/d6af2bc7da88de0f9a9c763a173d2f7dc62587bc.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit d6af2bc7da88de0f9a9c763a173d2f7dc62587bc
+parent e8e8ed604d57c886006d9c50c614a26bbb26c291
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Thu, 16 Nov 2023 13:13:21 +0100
+
+Edit big.txt in several places
+
+</content>
+</entry>
+<entry>
+<id>e8e8ed604d57c886006d9c50c614a26bbb26c291</id>
+<published>2023-11-16T11:13:21Z</published>
+<updated>2023-11-16T11:13:21Z</updated>
+<title>Change 12</title>
+<link rel="alternate" type="text/html" href="commit/e8e8ed604d57c886006d9c50c614a26bbb26c291.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit e8e8ed604d57c886006d9c50c614a26bbb26c291
+parent 4e42b988e47665a1899da03296d6d6d7d12ecf24
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Thu, 16 Nov 2023 12:13:21 +0100
+
+Change 12
+
+</content>
+</entry>
+<entry>
+<id>4e42b988e47665a1899da03296d6d6d7d12ecf24</id>
+<published>2023-11-16T10:13:21Z</published>
+<updated>2023-11-16T10:13:21Z</updated>
+<title>Change 11</title>
+<link rel="alternate" type="text/html" href="commit/4e42b988e47665a1899da03296d6d6d7d12ecf24.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 4e42b988e47665a1899da03296d6d6d7d12ecf24
+parent 729eb82da7a9cf4a56f6ed63cdb8d991058204d7
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Thu, 16 Nov 2023 11:13:21 +0100
+
+Change 11
+
+</content>
+</entry>
+<entry>
+<id>729eb82da7a9cf4a56f6ed63cdb8d991058204d7</id>
+<published>2023-11-16T09:13:21Z</published>
+<updated>2023-11-16T09:13:21Z</updated>
+<title>Change 10</title>
+<link rel="alternate" type="text/html" href="commit/729eb82da7a9cf4a56f6ed63cdb8d991058204d7.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 729eb82da7a9cf4a56f6ed63cdb8d991058204d7
+parent 1a858eafe0a936ea1969e94472cd99188ca65248
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Thu, 16 Nov 2023 10:13:21 +0100
+
+Change 10
+
+</content>
+</entry>
+<entry>
+<id>1a858eafe0a936ea1969e94472cd99188ca65248</id>
+<published>2023-11-16T08:13:21Z</published>
+<updated>2023-11-16T08:13:21Z</updated>
+<title>Change 9</title>
+<link rel="alternate" type="text/html" href="commit/1a858eafe0a936ea1969e94472cd99188ca65248.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 1a858eafe0a936ea1969e94472cd99188ca65248
+parent f7bcd6a17eb8b710513bb407c0d633ad62e106ec
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Thu, 16 Nov 2023 09:13:21 +0100
+
+Change 9
+
+</content>
+</entry>
+<entry>
+<id>f7bcd6a17eb8b710513bb407c0d633ad62e106ec</id>
+<published>2023-11-16T07:13:21Z</published>
+<updated>2023-11-16T07:13:21Z</updated>
+<title>Change 8</title>
+<link rel="alternate" type="text/html" href="commit/f7bcd6a17eb8b710513bb407c0d633ad62e106ec.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit f7bcd6a17eb8b710513bb407c0d633ad62e106ec
+parent bc7009814516b0d4bfa9319f701b5e0720d41a8c
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Thu, 16 Nov 2023 08:13:21 +0100
+
+Change 8
+
+</content>
+</entry>
+<entry>
+<id>bc7009814516b0d4bfa9319f701b5e0720d41a8c</id>
+<published>2023-11-16T06:13:21Z</published>
+<updated>2023-11-16T06:13:21Z</updated>
+<title>Change 7</title>
+<link rel="alternate" type="text/html" href="commit/bc7009814516b0d4bfa9319f701b5e0720d41a8c.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit bc7009814516b0d4bfa9319f701b5e0720d41a8c
+parent d7711e09a6fe4070f068a315ae4657f2eb38494d
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Thu, 16 Nov 2023 07:13:21 +0100
+
+Change 7
+
+</content>
+</entry>
+<entry>
+<id>d7711e09a6fe4070f068a315ae4657f2eb38494d</id>
+<published>2023-11-16T05:13:21Z</published>
+<updated>2023-11-16T05:13:21Z</updated>
+<title>Change 6</title>
+<link rel="alternate" type="text/html" href="commit/d7711e09a6fe4070f068a315ae4657f2eb38494d.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit d7711e09a6fe4070f068a315ae4657f2eb38494d
+parent 413501406407ca61dfb72a5cee6dd16dfb602d4c
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Thu, 16 Nov 2023 06:13:21 +0100
+
+Change 6
+
+</content>
+</entry>
+<entry>
+<id>413501406407ca61dfb72a5cee6dd16dfb602d4c</id>
+<published>2023-11-16T04:13:21Z</published>
+<updated>2023-11-16T04:13:21Z</updated>
+<title>Change 5</title>
+<link rel="alternate" type="text/html" href="commit/413501406407ca61dfb72a5cee6dd16dfb602d4c.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 413501406407ca61dfb72a5cee6dd16dfb602d4c
+parent 56b9b5887ebd0c854a825433c6e8a25a0a6494e9
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Thu, 16 Nov 2023 05:13:21 +0100
+
+Change 5
+
+</content>
+</entry>
+<entry>
+<id>56b9b5887ebd0c854a825433c6e8a25a0a6494e9</id>
+<published>2023-11-16T03:13:21Z</published>
+<updated>2023-11-16T03:13:21Z</updated>
+<title>Change 4</title>
+<link rel="alternate" type="text/html" href="commit/56b9b5887ebd0c854a825433c6e8a25a0a6494e9.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 56b9b5887ebd0c854a825433c6e8a25a0a6494e9
+parent 6b3c7bb2b3fc6ee1f6f38aac32fc8dba8cccfe23
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Thu, 16 Nov 2023 04:13:21 +0100
+
+Change 4
+
+</content>
+</entry>
+<entry>
+<id>6b3c7bb2b3fc6ee1f6f38aac32fc8dba8cccfe23</id>
+<published>2023-11-16T02:13:21Z</published>
+<updated>2023-11-16T02:13:21Z</updated>
+<title>Change 3</title>
+<link rel="alternate" type="text/html" href="commit/6b3c7bb2b3fc6ee1f6f38aac32fc8dba8cccfe23.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 6b3c7bb2b3fc6ee1f6f38aac32fc8dba8cccfe23
+parent 8443fdf2d216e9b114629928e14fed8ffd48c19a
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Thu, 16 Nov 2023 03:13:21 +0100
+
+Change 3
+
+</content>
+</entry>
+<entry>
+<id>8443fdf2d216e9b114629928e14fed8ffd48c19a</id>
+<published>2023-11-16T01:13:21Z</published>
+<updated>2023-11-16T01:13:21Z</updated>
+<title>Change 2</title>
+<link rel="alternate" type="text/html" href="commit/8443fdf2d216e9b114629928e14fed8ffd48c19a.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 8443fdf2d216e9b114629928e14fed8ffd48c19a
+parent 6565f6d6c3db455b199a604787f6da2d64436773
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Thu, 16 Nov 2023 02:13:21 +0100
+
+Change 2
+
+</content>
+</entry>
+<entry>
+<id>6565f6d6c3db455b199a604787f6da2d64436773</id>
+<published>2023-11-16T00:13:21Z</published>
+<updated>2023-11-16T00:13:21Z</updated>
+<title>Change 1</title>
+<link rel="alternate" type="text/html" href="commit/6565f6d6c3db455b199a604787f6da2d64436773.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 6565f6d6c3db455b199a604787f6da2d64436773
+parent f248bb832dc176c68e6cb570f93809c5ebbbb7f8
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Thu, 16 Nov 2023 01:13:21 +0100
+
+Change 1
+
+</content>
+</entry>
+<entry>
+<id>f248bb832dc176c68e6cb570f93809c5ebbbb7f8</id>
+<published>2023-11-15T23:13:21Z</published>
+<updated>2023-11-15T23:13:21Z</updated>
+<title></title>
+<link rel="alternate" type="text/html" href="commit/f248bb832dc176c68e6cb570f93809c5ebbbb7f8.html" />
+<author>
+<name>Bob O&#39;Brien</name>
+<email>bob@example.com</email>
+</author>
+<content>commit f248bb832dc176c68e6cb570f93809c5ebbbb7f8
+parent f9b8efefcd4af216ed78d6b775d16db1ef4aee79
+Author: Bob O&#39;Brien &lt;bob@example.com&gt;
+Date:   Wed, 15 Nov 2023 18:13:21 -0500
+
+
+</content>
+</entry>
+<entry>
+<id>f9b8efefcd4af216ed78d6b775d16db1ef4aee79</id>
+<published>2023-11-15T22:13:21Z</published>
+<updated>2023-11-15T22:13:21Z</updated>
+<title>Merge branch &#39;feature&#39;</title>
+<link rel="alternate" type="text/html" href="commit/f9b8efefcd4af216ed78d6b775d16db1ef4aee79.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit f9b8efefcd4af216ed78d6b775d16db1ef4aee79
+parent 51b9a82d2c8019d44c0463dbcec62b718777a8d0
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 23:13:21 +0100
+
+Merge branch &#39;feature&#39;
+
+</content>
+</entry>
+<entry>
+<id>51b9a82d2c8019d44c0463dbcec62b718777a8d0</id>
+<published>2023-11-15T21:13:21Z</published>
+<updated>2023-11-15T21:13:21Z</updated>
+<title>Main: parallel change</title>
+<link rel="alternate" type="text/html" href="commit/51b9a82d2c8019d44c0463dbcec62b718777a8d0.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 51b9a82d2c8019d44c0463dbcec62b718777a8d0
+parent 9823cb6752f51a760656ab894060bbb08ba1e895
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 22:13:21 +0100
+
+Main: parallel change
+
+</content>
+</entry>
+<entry>
+<id>f1b56c537fa73a205c5d19fb5e8d41d5b2b00140</id>
+<published>2023-11-15T20:13:21Z</published>
+<updated>2023-11-15T20:13:21Z</updated>
+<title>Feature: step 2</title>
+<link rel="alternate" type="text/html" href="commit/f1b56c537fa73a205c5d19fb5e8d41d5b2b00140.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit f1b56c537fa73a205c5d19fb5e8d41d5b2b00140
+parent f4065cc00bfd3ee410c9a86b4b537a9bda4e814e
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 21:13:21 +0100
+
+Feature: step 2
+
+</content>
+</entry>
+<entry>
+<id>f4065cc00bfd3ee410c9a86b4b537a9bda4e814e</id>
+<published>2023-11-15T19:13:21Z</published>
+<updated>2023-11-15T19:13:21Z</updated>
+<title>Feature: step 1</title>
+<link rel="alternate" type="text/html" href="commit/f4065cc00bfd3ee410c9a86b4b537a9bda4e814e.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit f4065cc00bfd3ee410c9a86b4b537a9bda4e814e
+parent 9823cb6752f51a760656ab894060bbb08ba1e895
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 20:13:21 +0100
+
+Feature: step 1
+
+</content>
+</entry>
+<entry>
+<id>9823cb6752f51a760656ab894060bbb08ba1e895</id>
+<published>2023-11-15T18:13:20Z</published>
+<updated>2023-11-15T18:13:20Z</updated>
+<title>Add non-UTF-8 bytes</title>
+<link rel="alternate" type="text/html" href="commit/9823cb6752f51a760656ab894060bbb08ba1e895.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 9823cb6752f51a760656ab894060bbb08ba1e895
+parent c150e26540288d2e45782ee33f05c933d49181f4
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 19:13:20 +0100
+
+Add non-UTF-8 bytes
+
+</content>
+</entry>
+<entry>
+<id>c150e26540288d2e45782ee33f05c933d49181f4</id>
+<published>2023-11-15T17:13:20Z</published>
+<updated>2023-11-15T17:13:20Z</updated>
+<title>Add files with odd names</title>
+<link rel="alternate" type="text/html" href="commit/c150e26540288d2e45782ee33f05c933d49181f4.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit c150e26540288d2e45782ee33f05c933d49181f4
+parent 759b75598f5c3ea28d6719aa0cb69dcebeec96b0
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 18:13:20 +0100
+
+Add files with odd names
+
+</content>
+</entry>
+<entry>
+<id>759b75598f5c3ea28d6719aa0cb69dcebeec96b0</id>
+<published>2023-11-15T16:13:20Z</published>
+<updated>2023-11-15T16:13:20Z</updated>
+<title>Add submodule</title>
+<link rel="alternate" type="text/html" href="commit/759b75598f5c3ea28d6719aa0cb69dcebeec96b0.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 759b75598f5c3ea28d6719aa0cb69dcebeec96b0
+parent 574b48a7db265bec13fd5aae3978ababfd493cfd
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 17:13:20 +0100
+
+Add submodule
+
+</content>
+</entry>
+<entry>
+<id>574b48a7db265bec13fd5aae3978ababfd493cfd</id>
+<published>2023-11-15T15:13:20Z</published>
+<updated>2023-11-15T15:13:20Z</updated>
+<title>Add executable</title>
+<link rel="alternate" type="text/html" href="commit/574b48a7db265bec13fd5aae3978ababfd493cfd.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 574b48a7db265bec13fd5aae3978ababfd493cfd
+parent c4d2868808357a0fad56de175d00f5fc5543cbdf
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 16:13:20 +0100
+
+Add executable
+
+</content>
+</entry>
+<entry>
+<id>c4d2868808357a0fad56de175d00f5fc5543cbdf</id>
+<published>2023-11-15T14:13:20Z</published>
+<updated>2023-11-15T14:13:20Z</updated>
+<title>Add symlink</title>
+<link rel="alternate" type="text/html" href="commit/c4d2868808357a0fad56de175d00f5fc5543cbdf.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit c4d2868808357a0fad56de175d00f5fc5543cbdf
+parent b8943c107c56813a706397fa2e1ca1d7bbd6beba
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 15:13:20 +0100
+
+Add symlink
+
+</content>
+</entry>
+<entry>
+<id>b8943c107c56813a706397fa2e1ca1d7bbd6beba</id>
+<published>2023-11-15T13:13:20Z</published>
+<updated>2023-11-15T13:13:20Z</updated>
+<title>Turn docs/LICENSE into a symlink</title>
+<link rel="alternate" type="text/html" href="commit/b8943c107c56813a706397fa2e1ca1d7bbd6beba.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit b8943c107c56813a706397fa2e1ca1d7bbd6beba
+parent 63541280b0196bb1e3aa4bd98fd1ab7a98dd746f
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 14:13:20 +0100
+
+Turn docs/LICENSE into a symlink
+
+</content>
+</entry>
+<entry>
+<id>63541280b0196bb1e3aa4bd98fd1ab7a98dd746f</id>
+<published>2023-11-15T12:13:20Z</published>
+<updated>2023-11-15T12:13:20Z</updated>
+<title>Copy LICENSE into docs</title>
+<link rel="alternate" type="text/html" href="commit/63541280b0196bb1e3aa4bd98fd1ab7a98dd746f.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 63541280b0196bb1e3aa4bd98fd1ab7a98dd746f
+parent 8fb70ff857a532edff8885afe596bd67fb78b6e7
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 13:13:20 +0100
+
+Copy LICENSE into docs
+
+</content>
+</entry>
+<entry>
+<id>8fb70ff857a532edff8885afe596bd67fb78b6e7</id>
+<published>2023-11-15T11:13:20Z</published>
+<updated>2023-11-15T11:13:20Z</updated>
+<title>Modify main.c and copy it</title>
+<link rel="alternate" type="text/html" href="commit/8fb70ff857a532edff8885afe596bd67fb78b6e7.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 8fb70ff857a532edff8885afe596bd67fb78b6e7
+parent 50ef32f99fbca9bf7838dcea86eaaaa59244d3cc
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 12:13:20 +0100
+
+Modify main.c and copy it
+
+</content>
+</entry>
+<entry>
+<id>50ef32f99fbca9bf7838dcea86eaaaa59244d3cc</id>
+<published>2023-11-15T10:13:20Z</published>
+<updated>2023-11-15T10:13:20Z</updated>
+<title>Rename util.c to math.c</title>
+<link rel="alternate" type="text/html" href="commit/50ef32f99fbca9bf7838dcea86eaaaa59244d3cc.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 50ef32f99fbca9bf7838dcea86eaaaa59244d3cc
+parent 6cb179380a1899a4fa4be7b4f1ec2771e6397205
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 11:13:20 +0100
+
+Rename util.c to math.c
+
+</content>
+</entry>
+<entry>
+<id>6cb179380a1899a4fa4be7b4f1ec2771e6397205</id>
+<published>2023-11-15T09:13:20Z</published>
+<updated>2023-11-15T09:13:20Z</updated>
+<title>Add big file</title>
+<link rel="alternate" type="text/html" href="commit/6cb179380a1899a4fa4be7b4f1ec2771e6397205.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 6cb179380a1899a4fa4be7b4f1ec2771e6397205
+parent bcb80f4b16c1434fe180ddb7cd13a0222e293e71
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 10:13:20 +0100
+
+Add big file
+
+</content>
+</entry>
+<entry>
+<id>bcb80f4b16c1434fe180ddb7cd13a0222e293e71</id>
+<published>2023-11-15T08:13:20Z</published>
+<updated>2023-11-15T08:13:20Z</updated>
+<title>Modify binary file</title>
+<link rel="alternate" type="text/html" href="commit/bcb80f4b16c1434fe180ddb7cd13a0222e293e71.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit bcb80f4b16c1434fe180ddb7cd13a0222e293e71
+parent 5eac5c2a4699933561787cef09c56312cf5dc9a6
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 09:13:20 +0100
+
+Modify binary file
+
+</content>
+</entry>
+<entry>
+<id>5eac5c2a4699933561787cef09c56312cf5dc9a6</id>
+<published>2023-11-15T07:13:20Z</published>
+<updated>2023-11-15T07:13:20Z</updated>
+<title>Add binary file</title>
+<link rel="alternate" type="text/html" href="commit/5eac5c2a4699933561787cef09c56312cf5dc9a6.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 5eac5c2a4699933561787cef09c56312cf5dc9a6
+parent 889de142ead2ac79f7f9641526dd70a2ef3bbb2f
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 08:13:20 +0100
+
+Add binary file
+
+</content>
+</entry>
+<entry>
+<id>889de142ead2ac79f7f9641526dd70a2ef3bbb2f</id>
+<published>2023-11-15T06:13:20Z</published>
+<updated>2023-11-15T06:13:20Z</updated>
+<title>Add empty file</title>
+<link rel="alternate" type="text/html" href="commit/889de142ead2ac79f7f9641526dd70a2ef3bbb2f.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 889de142ead2ac79f7f9641526dd70a2ef3bbb2f
+parent a20bf3e8020d68b81780fa5fc2fb0a34a49e9a1e
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 07:13:20 +0100
+
+Add empty file
+
+</content>
+</entry>
+<entry>
+<id>a20bf3e8020d68b81780fa5fc2fb0a34a49e9a1e</id>
+<published>2023-11-15T05:13:20Z</published>
+<updated>2023-11-15T05:13:20Z</updated>
+<title>Add CRLF file</title>
+<link rel="alternate" type="text/html" href="commit/a20bf3e8020d68b81780fa5fc2fb0a34a49e9a1e.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit a20bf3e8020d68b81780fa5fc2fb0a34a49e9a1e
+parent f5acf774bc43a5a2efb2eebf8c2432ac87f55970
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 06:13:20 +0100
+
+Add CRLF file
+
+</content>
+</entry>
+<entry>
+<id>f5acf774bc43a5a2efb2eebf8c2432ac87f55970</id>
+<published>2023-11-15T04:13:20Z</published>
+<updated>2023-11-15T04:13:20Z</updated>
+<title>Add trailing newline</title>
+<link rel="alternate" type="text/html" href="commit/f5acf774bc43a5a2efb2eebf8c2432ac87f55970.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit f5acf774bc43a5a2efb2eebf8c2432ac87f55970
+parent 69a0ccce1bc3c8327455d920b01ff79bad3add1c
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 05:13:20 +0100
+
+Add trailing newline
+
+</content>
+</entry>
+<entry>
+<id>69a0ccce1bc3c8327455d920b01ff79bad3add1c</id>
+<published>2023-11-15T03:13:20Z</published>
+<updated>2023-11-15T03:13:20Z</updated>
+<title>Add file without trailing newline</title>
+<link rel="alternate" type="text/html" href="commit/69a0ccce1bc3c8327455d920b01ff79bad3add1c.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 69a0ccce1bc3c8327455d920b01ff79bad3add1c
+parent 6f77269cae5954ae84575b44361cbf744f059100
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 04:13:20 +0100
+
+Add file without trailing newline
+
+</content>
+</entry>
+<entry>
+<id>6f77269cae5954ae84575b44361cbf744f059100</id>
+<published>2023-11-15T02:13:20Z</published>
+<updated>2023-11-15T02:13:20Z</updated>
+<title>Say hello world</title>
+<link rel="alternate" type="text/html" href="commit/6f77269cae5954ae84575b44361cbf744f059100.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 6f77269cae5954ae84575b44361cbf744f059100
+parent b3632877f4f7efed2a457fc87cb6381e40a2b87b
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 03:13:20 +0100
+
+Say hello world
+
+</content>
+</entry>
+<entry>
+<id>b3632877f4f7efed2a457fc87cb6381e40a2b87b</id>
+<published>2023-11-15T01:13:20Z</published>
+<updated>2023-11-15T01:13:20Z</updated>
+<title>Add util.c</title>
+<link rel="alternate" type="text/html" href="commit/b3632877f4f7efed2a457fc87cb6381e40a2b87b.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit b3632877f4f7efed2a457fc87cb6381e40a2b87b
+parent 8a5edb7932173206a85cb35f20a8b12a836a458e
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 02:13:20 +0100
+
+Add util.c
+
+With a longer body that spans
+multiple lines.
+
+And a second paragraph.
+
+</content>
+</entry>
+<entry>
+<id>8a5edb7932173206a85cb35f20a8b12a836a458e</id>
+<published>2023-11-15T00:13:20Z</published>
+<updated>2023-11-15T00:13:20Z</updated>
+<title>Add main.c</title>
+<link rel="alternate" type="text/html" href="commit/8a5edb7932173206a85cb35f20a8b12a836a458e.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 8a5edb7932173206a85cb35f20a8b12a836a458e
+parent 6c2cfe3c2af9967f9ead287a51f598c2c621bcb5
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 01:13:20 +0100
+
+Add main.c
+
+</content>
+</entry>
+<entry>
+<id>6c2cfe3c2af9967f9ead287a51f598c2c621bcb5</id>
+<published>2023-11-14T23:13:20Z</published>
+<updated>2023-11-14T23:13:20Z</updated>
+<title>Initial commit</title>
+<link rel="alternate" type="text/html" href="commit/6c2cfe3c2af9967f9ead287a51f598c2c621bcb5.html" />
+<author>
+<name>Alice Example</name>
+<email>alice@example.com</email>
+</author>
+<content>commit 6c2cfe3c2af9967f9ead287a51f598c2c621bcb5
+Author: Alice Example &lt;alice@example.com&gt;
+Date:   Wed, 15 Nov 2023 00:13:20 +0100
+
+Initial commit
+
+</content>
+</entry>
+</feed>

@@ -1,0 +1,50 @@
+[package]
+name = "streagit"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "On-demand, streaming, stagit-compatible git web renderer"
+license = "MIT"
+repository = "https://github.com/MarvAmBass/streagit"
+readme = "README.md"
+
+[lib]
+name = "streagit"
+path = "src/lib.rs"
+
+[[bin]]
+name = "streagit"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "time", "signal", "macros"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "query", "macros"] }
+tower = { version = "0.5", features = ["limit", "util"] }
+tower-http = { version = "0.6", features = ["compression-gzip", "trace"] }
+hyper = { version = "1", features = ["http1", "server"] }
+hyper-util = { version = "0.1", features = ["tokio", "server", "http1"] }
+http = "1"
+http-body-util = "0.1"
+bytes = "1"
+futures-core = "0.3"
+tokio-stream = { version = "0.1", features = ["sync"] }
+gix = { version = "=0.89.0", features = ["max-performance-safe", "blob-diff", "revision"] }
+bstr = "1"
+clap = { version = "4", features = ["derive", "env"] }
+lru = "0.16"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+anyhow = "1"
+thiserror = "2"
+libc = "0.2"
+humantime = "2"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+opt-level = 3
