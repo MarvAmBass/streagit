@@ -161,24 +161,29 @@ async fn file_pages_match_stagit() {
         return;
     }
     let (app, _) = app_with(golden_config());
-    fn walk(dir: &Path, base: &str, out: &mut Vec<String>) {
-        for entry in std::fs::read_dir(dir).unwrap() {
-            let entry = entry.unwrap();
-            let name = entry.file_name().to_string_lossy().into_owned();
-            let rel = if base.is_empty() {
-                name.clone()
-            } else {
-                format!("{base}/{name}")
-            };
-            if entry.path().is_dir() {
-                walk(&entry.path(), &rel, out);
-            } else {
-                out.push(rel);
-            }
+    // The page list comes from the git tree, not from a directory walk: a
+    // checkout on macOS/APFS (or one synced by tools that normalise file names)
+    // may hold `ümlaut.txt.html` in NFD form, which no longer matches the NFC
+    // name inside the repository. Opening the golden file by its NFC name works
+    // on every file system that stores either form.
+    let mut pages = Vec::new();
+    let listing = git_bytes(&["ls-tree", "-r", "--name-only", "-z", "HEAD"]);
+    for path in listing.split(|&c| c == 0) {
+        // the non-UTF-8 name (`caf\xe9.txt`) has no golden page (gen.sh drops it)
+        let Ok(path) = std::str::from_utf8(path) else {
+            continue;
+        };
+        if path.is_empty() || path == "vendor/lib" {
+            continue;
+        }
+        let page = format!("file/{path}.html");
+        if golden_dir().join(&page).is_file() {
+            pages.push(page);
+        } else {
+            // gen.sh also drops the 10k-line page
+            assert_eq!(path, "big.txt", "golden page missing for {path:?}");
         }
     }
-    let mut pages = Vec::new();
-    walk(&golden_dir().join("file"), "file", &mut pages);
     assert!(pages.len() >= 20, "{pages:?}");
     for page in pages {
         compare(&app, &page).await;

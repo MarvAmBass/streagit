@@ -38,7 +38,21 @@ pub fn fixture_root() -> &'static Path {
 
 /// Run `git` inside the fixture's main repo and return stdout.
 pub fn git(args: &[&str]) -> String {
-    let dir = fixture_root().join("github.com/alice/repos/fixture/repo.git");
+    git_in("github.com/alice/repos/fixture/repo.git", args)
+}
+
+/// Run `git` inside the repository at `rel` (below the fixture root) and return stdout.
+pub fn git_in(rel: &str, args: &[&str]) -> String {
+    String::from_utf8(git_bytes_in(rel, args)).unwrap()
+}
+
+/// Like `git`, but returns raw stdout bytes (listings may contain non-UTF-8 paths).
+pub fn git_bytes(args: &[&str]) -> Vec<u8> {
+    git_bytes_in("github.com/alice/repos/fixture/repo.git", args)
+}
+
+pub fn git_bytes_in(rel: &str, args: &[&str]) -> Vec<u8> {
+    let dir = fixture_root().join(rel);
     let out = std::process::Command::new("git")
         .arg("-C")
         .arg(&dir)
@@ -50,7 +64,7 @@ pub fn git(args: &[&str]) -> String {
         "git {args:?}: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    String::from_utf8(out.stdout).unwrap()
+    out.stdout
 }
 
 pub fn config() -> Config {
