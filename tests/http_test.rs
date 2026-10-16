@@ -855,7 +855,8 @@ fn disconnected_client_cancels_the_render() {
     use streagit::http::stream::ChunkOut;
     use streagit::render::out::{Out, RenderError};
     let (tx, rx) = tokio::sync::mpsc::channel(1);
-    let mut out = ChunkOut::new(tx, 1 << 20);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let mut out = ChunkOut::new(tx, 1 << 20, deadline);
     drop(rx);
     let big = vec![b'x'; 70 * 1024];
     assert!(matches!(out.write(&big), Err(RenderError::Cancelled)));

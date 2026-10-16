@@ -36,6 +36,7 @@ pub struct Metrics {
     pub not_modified: AtomicU64,
     pub queue_drops: AtomicU64,
     pub timeouts: AtomicU64,
+    pub slow_clients: AtomicU64,
     pub errors: AtomicU64,
 }
 
@@ -564,6 +565,7 @@ fn metrics_text(state: &AppState) -> String {
          # TYPE streagit_not_modified_total counter\nstreagit_not_modified_total {}\n\
          # TYPE streagit_queue_drops_total counter\nstreagit_queue_drops_total {}\n\
          # TYPE streagit_render_timeouts_total counter\nstreagit_render_timeouts_total {}\n\
+         # TYPE streagit_slow_clients_total counter\nstreagit_slow_clients_total {}\n\
          # TYPE streagit_render_errors_total counter\nstreagit_render_errors_total {}\n\
          # TYPE streagit_render_cache_entries gauge\nstreagit_render_cache_entries {}\n\
          # TYPE streagit_render_cache_bytes gauge\nstreagit_render_cache_bytes {}\n\
@@ -576,6 +578,7 @@ fn metrics_text(state: &AppState) -> String {
         m.not_modified.load(Ordering::Relaxed),
         m.queue_drops.load(Ordering::Relaxed),
         m.timeouts.load(Ordering::Relaxed),
+        m.slow_clients.load(Ordering::Relaxed),
         m.errors.load(Ordering::Relaxed),
         entries,
         bytes,
@@ -793,6 +796,7 @@ pub async fn handle(State(state): State<Arc<AppState>>, req: Request) -> Respons
     let st = state.clone();
     let key = head.key.clone();
     let max_keep = state.render_cache.max_entry;
+    let deadline = head.deadline;
     let path_for_log = path.clone();
     state.metrics.renders.fetch_add(1, Ordering::Relaxed);
     let path_for_panic = path.clone();
@@ -800,11 +804,19 @@ pub async fn handle(State(state): State<Arc<AppState>>, req: Request) -> Respons
     let task = tokio::task::spawn_blocking(move || {
         let _permit = permit;
         let started = Instant::now();
-        let mut out = ChunkOut::new(tx, max_keep);
+        let mut out = ChunkOut::new(tx, max_keep, deadline);
         let result = render(&mut out);
         let outcome = match result {
             Ok(()) => out.finish().ok().flatten(),
             Err(RenderError::Cancelled) => None,
+            Err(RenderError::SlowClient) => {
+                st.metrics.slow_clients.fetch_add(1, Ordering::Relaxed);
+                tracing::warn!(
+                    path = path_for_log,
+                    "client did not read the response before the deadline; render aborted"
+                );
+                None
+            }
             Err(RenderError::Timeout) => {
                 st.metrics.timeouts.fetch_add(1, Ordering::Relaxed);
                 tracing::warn!(path = path_for_log, "render timed out");

@@ -11,6 +11,9 @@ pub enum RenderError {
     /// The render deadline passed; a notice has to be written by the caller.
     #[error("render time limit exceeded")]
     Timeout,
+    /// The client did not read the stream before the deadline; nothing more is sent.
+    #[error("client too slow")]
+    SlowClient,
     /// Something in the repository could not be read.
     #[error("{0}")]
     Git(#[from] anyhow::Error),
