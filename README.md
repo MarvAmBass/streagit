@@ -46,11 +46,11 @@ are ignored.
 
 | URL (under the repo prefix) | content |
 |---|---|
-| `log.html` | commit log of HEAD with files/+/- per commit, `--page-size` rows, `?from=<id>` for the next page, `?ref=<branch or tag>` for another ref |
+| `log.html` | commit log of HEAD with files/+/- per commit, `--page-size` rows, `?from=<id>` for the next page (the walk restarts at the tip and skips to `<id>`, so pages stay continuous across merges), `?ref=<branch or tag>` for another ref |
 | `commit/<id>.html` | commit header, diffstat, diff (first parent for merges) |
 | `files.html` | every file in HEAD (`--files-line-counts` shows line counts like stagit) |
-| `file/<path>.html` | blob with line numbers (truncated beyond `--max-blob-bytes`) |
-| `raw/<path>` | raw blob |
+| `file/<path>.html` | blob with line numbers (truncated beyond `--max-blob-bytes`; blobs above `--max-commit-diff-bytes` are refused with 413) |
+| `raw/<path>` | raw blob (same 413 limit) |
 | `refs.html` | branches and tags |
 | `atom.xml`, `tags.xml` | feeds (`--public-url` makes the links absolute) |
 | `style.css`, `logo.png`, `favicon.png` | embedded stagit assets, or from `--assets-dir` |
@@ -101,6 +101,12 @@ Every flag can also be set through `STREAGIT_<NAME>` (e.g. `STREAGIT_ROOT`).
   costs its diffs once.
 - Renders run in a bounded pool; cache hits and 304s never touch it. Pages are
   streamed in 64 KiB chunks and a render stops as soon as the client goes away.
+  A client that stops reading cannot hold a render slot: once the render
+  deadline passes without the stream being consumed, the render is dropped
+  (`streagit_slow_clients_total` in `/metrics`).
+- `refs.html` and `tags.xml` only read object headers while peeling refs
+  (annotated tags use the `packed-refs` peel lines), so a repository with tens
+  of thousands of tags costs milliseconds, not a commit load per tag.
 - stagit's "Diff is too large, output suppressed." thresholds apply (1000 files
   or 100k lines); additionally single blobs above `--max-diff-blob-bytes` and
   commits above `--max-commit-diff-bytes` are listed but not diffed.
@@ -172,6 +178,27 @@ container), repository on the container file system:
 Peak RSS during the whole-history walk was 185 MB (render cache 64 MiB,
 four render threads with 8 MiB object caches, diffstat cache). Run
 `scripts/bench.sh` to reproduce.
+
+Larger repositories, same setup (`--render-threads 2`, one server process
+serving all three, cold caches; CPU = process CPU time per request):
+
+| repository | page | cold | cached | CPU |
+|---|---|---|---|---|
+| git.git (82.5k commits, 4.9k files, 1k tags) | `log.html` | 153 ms | < 1 ms | 160 ms |
+| | `log.html?from=` commit #41,256 | 308 ms | 1 ms | 300 ms |
+| | largest commit of the last 4,000 (2.4 MB page) | 13 ms | 13 ms | 20 ms |
+| | `files.html` (764 KB) | 10 ms | 1 ms | ~0 |
+| | `refs.html` | 6 ms | 1 ms | 10 ms |
+| llama.cpp (11.7k commits, 3.8k files, 8k tags) | `log.html` | 279 ms | < 1 ms | 290 ms |
+| | `refs.html` (966 KB, 8,016 tags) | 62 ms | 2 ms | 70 ms |
+| | largest commit of the last 4,000 (6.8 MB page) | 22 ms | 22 ms | 20 ms |
+| | whole history through 117 log pages | 33 s | 20 ms | 33 s |
+| ComfyUI (6.2k commits) | `log.html` | 85 ms | < 1 ms | 70 ms |
+
+stagit 1.3 full renders of the same repositories: ComfyUI 10 s (341 MB),
+llama.cpp 61 s (1.1 GB), git.git 192 s (2.4 GB of HTML). After the walks the
+process had 84 MB of anonymous memory; the rest of its RSS (~470 MB) were
+file-backed, reclaimable mappings of the pack files.
 
 ## Fidelity and deviations from stagit
 

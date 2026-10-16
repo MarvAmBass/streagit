@@ -1414,6 +1414,42 @@ Design choices:
 - Build: `cargo-cache`/`streagit-target` Docker volumes keep the registry and
   target directory; the registry volume was reused from the §3.2 experiment.
 
+Review fixes (found by attacking the first implementation with synthetic
+repositories: 20k tags, 100k-file commits, 100 MB blobs, a 3,000-deep tree,
+a 1 MB commit message, HTML in every user-controlled field):
+
+- **Paging continuity** (§6.2): starting the walk at `?from=<oid>` alone drops
+  commits. The date-ordered walk pops one branch's commit while the other
+  branch's older commits are still queued; those are not reachable from the
+  popped commit, so a page boundary there lost them. `?from=` now restarts the
+  walk at the tip and skips to `<oid>` (commit headers only, no diffs; a deep
+  page costs O(depth) decodes, ~0.3 s for commit 41k of git.git). The
+  `paging` fixture repo and `log_paging_is_continuous_across_merges` pin this.
+- **refs listing memory**: `RefInfo` kept the full commit message per ref and
+  gix's `peeled()` iterator loaded the whole target object for every ref; with
+  20k tags on a commit with a 1 MB message the process was OOM-killed. Refs are
+  now peeled from `packed-refs` peel lines and object headers (tag objects are
+  the only objects read), results are shared per target, and only the author is
+  kept; `tags.xml` loads the commits of its `--feed-entries` entries on demand.
+- **Slow clients**: `blocking_send` on the chunk channel blocked a render
+  thread for as long as the client refused to read, holding a render permit
+  indefinitely. Sends now time out at the render deadline
+  (`RenderError::SlowClient`, `streagit_slow_clients_total`).
+- **Huge blobs**: `file/<path>` and `raw/<path>` loaded the blob before any
+  size check (`raw/` even outside the render pool, in `prepare`). Both now
+  check the object header first and answer 413 above
+  `--max-commit-diff-bytes`; `raw/` loads under a render permit.
+- `commit/<oid>` resolved the object with `find_object` (a blob id of a 100 MB
+  blob loaded it): header-only now. Malformed `?from=`/`?ref=` values and
+  over-long ref names (previously a 500 from the file system) are 404.
+- `files.html` stops descending at 256 directory levels (recursion on a render
+  thread; git itself refuses deeper trees). The render cache's byte accounting
+  ignored evictions by entry count. The log ETag includes the `?ref=` name.
+- The golden file-page test enumerated `tests/golden/fixture/file/` from the
+  file system; on APFS the `ümlaut` page is stored NFD and no longer matched
+  the NFC tree path, so the test silently failed on macOS checkouts. It now
+  enumerates HEAD's tree.
+
 Scope (§14): M1 complete; from M2 `?ref=`/`--link-refs`, persistent stats,
 single-flight, `--files-line-counts`, robots, `--nice`, HEAD fallbacks,
 `html.<unit>`, gzip and `/metrics` are done; from M3 `raw/<path>`. Not
