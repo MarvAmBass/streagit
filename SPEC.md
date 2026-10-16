@@ -1344,3 +1344,80 @@ MIT/X Consortium License, (c) 2015-2026 Hiltjo Posthuma
 notice must be reproduced in streagit's `LICENSE` (second section) and
 `README.md` must say that the page layout and stylesheet are derived from
 stagit. No stagit C code is copied; the output format is re-implemented.
+
+---
+
+## 17. Implementation notes (v0.1.0)
+
+Decisions taken while implementing against the real APIs, and where the code
+knowingly differs from the text above. The golden test (`tests/golden_test.rs`)
+compares every page of the fixture with stagit 1.3's output byte for byte, so
+the items marked *fidelity* are facts about stagit/libgit2 that the sections
+above got wrong or left open.
+
+Fidelity (found by the golden test, now matched exactly):
+
+- **"\ No newline at end of file"** (§4.5 item 6): libgit2 gives the marker the
+  origin of the line it follows (after `+` → counted/rendered as an addition,
+  after `-` → as a deletion, after a context line → context). streagit does the
+  same, so counts match stagit exactly; the planned deviation is not needed.
+- **Submodule entries are deltas** (§4.5 "submodules are ignored"): with
+  `GIT_DIFF_IGNORE_SUBMODULES` libgit2 still reports gitlink additions /
+  changes as deltas and diffs the synthetic content `Subproject commit <id>\n`
+  (+1 line). streagit reproduces this.
+- **Typechange deltas have no hunks**: libgit2 prints the `diff --git` line
+  only, 0/0 in the diffstat (not a content diff of blob vs. symlink target).
+- **Copies**: libgit2's exact-match copy source is the *old* side of a file
+  modified in the same commit. gix's copy tracker matches the *new* side and
+  drops the modification, so streagit uses gix for exact renames only and
+  detects copies itself (`git::diff::detect_copies`).
+- **Empty commit message**: `git_commit_summary` returns `""`, not NULL, so
+  the log row still has an (empty) link and the atom entry an empty `<title>`;
+  the `<content>` message block is printed unconditionally.
+- **`<title>`**: the name is always printed; ` - ` precedes it only when the
+  page title is non-empty (§4.3 implied the name was conditional).
+- `<hr/>` is printed once before the first `diff --git`, not per delta.
+- A final blob line without `\n` is written without one (`…</pre>`); `log.html`
+  and `files.html` end with `</tbody></table>` directly followed by the footer.
+- A tag pointing at a tree makes stagit stop iterating refs (§4.8); the
+  fixture names it `zz-tree-tag` so that stagit still lists the real tags and
+  the golden refs/tags pages are comparable. streagit skips such tags.
+
+Design choices:
+
+- Line diffs are computed directly with `gix::diff::blob` (imara-diff, Myers,
+  `postprocess_no_heuristic`) on the two blob buffers rather than through gix's
+  resource-cache platform: full control over context merging (gap ≤ 6 lines),
+  xdiff's funcname rule (search upwards, bounded by the previous hunk's start,
+  80 bytes), markers and size limits. Tree diffs use gix with exact rename
+  tracking (`Rewrites { copies: None, percentage: None, limit: 1000 }`).
+- gix 0.89 errors are `gix::Error` (gix-error); `is_not_found()` maps to 404.
+  Repositories are opened with `open::Options::isolated()` (no user/system
+  config, no environment).
+- Cache keys and ETags include a hash of the canonical git dir: versions and
+  forks share tips and trees with their parent, so keying by object id alone
+  served the wrong repository's header.
+- The persistent diffstat cache (§8.4) is one append-only file
+  (`<cache-dir>/stats.v1.bin`, 32-byte records) for all repositories instead of
+  one file per repo – object ids are globally unique. Blob line counts share
+  the file (`files = u32::MAX` marks them). The tail is loaded when the file
+  holds more than `--stats-entries` records; a torn record is dropped.
+- Render permits: `try_acquire` first, otherwise wait if fewer than
+  `--max-queue` requests are waiting, at most `--queue-timeout`, else 503.
+  `HEAD` requests never render (headers only; `Content-Length` when cached).
+- The render timeout check happens between rows/deltas/lines; the notice is
+  appended to the already-sent page (200). If the queue wait used up the
+  deadline before the first byte, 503 is returned instead of 504.
+- Compression is gzip only (`tower-http`); ETags stay strong.
+- `--allow-git-paths` requires `<name>.git` to match `[A-Za-z0-9_.~+-]+`;
+  `html.<unit>` rejects units that look like versions (`v<digits>`).
+- Build: `cargo-cache`/`streagit-target` Docker volumes keep the registry and
+  target directory; the registry volume was reused from the §3.2 experiment.
+
+Scope (§14): M1 complete; from M2 `?ref=`/`--link-refs`, persistent stats,
+single-flight, `--files-line-counts`, robots, `--nice`, HEAD fallbacks,
+`html.<unit>`, gzip and `/metrics` are done; from M3 `raw/<path>`. Not
+implemented: `tree/<dir>/` pages, the index page (`--index`), `?page=K`,
+pre-compressed cache entries, `--stats-prune`, a unix socket listener, header
+read timeouts, `Range` requests, brotli. SHA-256 repositories: 64-hex ids are
+accepted syntactically but untested.
