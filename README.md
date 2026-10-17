@@ -216,7 +216,7 @@ purpose streagit differs in a few places (all listed in `SPEC.md`):
 
 ## License
 
-MIT, see `LICENSE (MIT) and LICENSE-stagit`. The page layout, `assets/style.css`, `assets/logo.png` and
+MIT, see `LICENSE`. The page layout, `assets/style.css`, `assets/logo.png` and
 `assets/favicon.png` are derived from stagit, MIT/X Consortium License,
 (c) 2015-2026 Hiltjo Posthuma; its license text is in `LICENSE-stagit`. No
 stagit C code is used; the output format is re-implemented.
