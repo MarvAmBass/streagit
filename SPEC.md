@@ -1373,7 +1373,7 @@ Design choices:
 - `--allow-git-paths` requires `<name>.git` to match `[A-Za-z0-9_.~+-]+`;
   `html.<unit>` rejects units that look like versions (`v<digits>`).
 
-Hardening (v0.1.1) – changes after stress tests with synthetic repositories
+Hardening (part of the v0.1.0 tag) – changes after stress tests with synthetic repositories
 (20k tags, 100k-file commits, 100 MB blobs, a 3,000-deep tree, a 1 MB commit
 message, HTML in every user-controlled field):
 
