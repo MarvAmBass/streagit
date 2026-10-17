@@ -4,7 +4,7 @@
 //! (regenerate with `tests/golden/gen.sh`). streagit renders the same pages
 //! and must match byte for byte after a few documented normalisations:
 //!
-//! - stagit keeps the trailing newline of the `description` file (it leaks into
+//! - stagit keeps the trailing newline of the `description` file (it ends up in
 //!   `<title>`, `<span class="desc">` and `<subtitle>`); streagit trims it.
 //! - stagit names the atom feed after the directory (`repo.git Atom Feed`);
 //!   streagit uses the display name (`repo`).

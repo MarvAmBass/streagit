@@ -972,7 +972,16 @@ async fn large_commit_pages_are_not_cached_but_small_ones_are() {
     )
     .await;
     assert!(r.body.len() < 8192);
-    let (entries, _, _, _) = state.render_cache.stats();
+    // the render thread stores the page right after sending the last chunk,
+    // so the client can see the end of the body before the cache insert
+    let mut entries = 0;
+    for _ in 0..100 {
+        entries = state.render_cache.stats().0;
+        if entries > 0 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
     assert_eq!(entries, 1);
     // the diffstat cache learned the commit's counts
     let oid = gix::ObjectId::from_hex(id.as_bytes()).unwrap();
