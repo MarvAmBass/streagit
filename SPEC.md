@@ -1,4 +1,9 @@
-# streagit – implementation specification
+# streagit – design document
+
+> **Note:** this is the design document written before v0.1.0. The code has
+> moved on in places; where this text and the implementation differ, §17
+> (implementation notes) and the code win. The section numbers are referenced
+> from code comments (`SPEC §…`) and are kept stable.
 
 **streagit** is an on-demand, streaming, stagit-compatible git web renderer
 written in Rust. It serves the pages that [stagit](https://codemadness.org/stagit.html)
@@ -7,16 +12,17 @@ would pre-render (`log.html`, `files.html`, `refs.html`, `commit/<id>.html`,
 at request time, over HTTP. Nothing is written to disk; results are cached in
 memory keyed by immutable git object ids.
 
-It exists so that [gitbackup](https://github.com/MarvAmBass/gitbackup) can stop
-running `stagit` over hundreds of mirrored repositories after every change. Most of
+The motivating use case is a backup mirror such as
+[gitbackup](https://github.com/MarvAmBass/gitbackup) that would otherwise run
+`stagit` over hundreds of mirrored repositories after every change. Most of
 the pre-rendered pages are never viewed; see §2 for measurements.
 
-This document is written for an implementer who has **not** read stagit. It
-reproduces stagit 1.3's exact output structure (§4) and defines everything
-else (§5–§13). Where streagit deliberately deviates from stagit, the deviation
-is marked **DEVIATION**.
+The document is self-contained: it describes stagit 1.3's exact output
+structure (§4), so the format can be followed without reading stagit's
+source, and defines everything else (§5–§13). Where streagit deliberately
+deviates from stagit, the deviation is marked **DEVIATION**.
 
-Status: specification, v1. Target: stagit 1.3 (git://git.codemadness.org/stagit,
+Status: design, v1 (pre-v0.1.0). Target: stagit 1.3 (git://git.codemadness.org/stagit,
 tag `1.3`; at the time of writing `master` == `1.3`, zero commits ahead).
 
 ---
@@ -62,16 +68,16 @@ Facts streagit must deal with:
   `objects` directory of the repo that contains the file. Alternates can
   nest (a fork's version → the fork → the parent). The git library must
   resolve relative alternates, recursively.
-- Sizes: hundreds of repos; some are huge (home-assistant/core ~ 100k commits,
-  llama.cpp, Linux-sized repos are possible), some have 10k+ tags; single
-  commits can touch thousands of files (ComfyUI has a commit whose stagit
-  page is 30 MB).
+- Sizes: hundreds of repos; some are huge (~100k commits, Linux-sized repos
+  are possible), some have 10k+ tags; single commits can touch thousands of
+  files (a 30 MB stagit page for one commit is realistic).
 - gitbackup serves the data root read-only at `/browse/` with Go's
   `http.FileServer`; its landing pages link `html/log.html`,
   `html/files.html`, `html/refs.html`, `html.v1/log.html` etc. (relative to
   the slot). Its dashboard links `/browse/<slot>/html/log.html`.
-- The host is an Alpine Linux container (musl), a low-power CPU, spinning
-  disks. CPU and disk seeks are precious; memory is moderate.
+- Typical host: a small home server or NAS running an Alpine Linux container
+  (musl), a low-power CPU and spinning disks. CPU and disk seeks are
+  precious; memory is moderate.
 
 ---
 
@@ -95,17 +101,16 @@ output directory, writes:
 Commit pages are skipped when the file already exists (`access(path)`), but
 the diff is still computed because `log.html` needs the counts. `-c
 cachefile` stores the HEAD id plus the rendered log rows; the next run stops
-walking at the cached HEAD. gitbackup uses `-c` and drops the cache
-(`full=true`) whenever history was rewritten, i.e. a full re-render of every
-commit. Frozen versions (`html.vN/`) are rendered once, fully.
+walking at the cached HEAD. A mirror tool using `-c` has to drop the cache
+whenever history was rewritten, i.e. a full re-render of every commit. Frozen versions (`html.vN/`) are rendered once, fully.
 
 ### 2.2 Measurements
 
 Benchmark: ComfyUI mirror as a bare repo (3,506 commits, 236 merges, 432
 files in HEAD, 58 tags, 80 MB packs), stagit 1.3 built against libgit2
 1.9.7 in `alpine:3`, instrumented with per-phase timers, repo copied to the
-container's own filesystem (Docker Desktop on an Apple-Silicon host; the NAS
-will be slower, especially cold-cache on spinning disks).
+container's own filesystem (Docker Desktop on an Apple-Silicon host; a
+low-power server will be slower, especially cold-cache on spinning disks).
 
 | run | log+commits | files | refs | atom+tags | total |
 |---|---|---|---|---|---|
@@ -124,18 +129,19 @@ Conclusions:
 1. **Diffing is ~100 % of the cost.** Run 4 (all commit pages already exist,
    nothing written except `log.html`) costs the same as run 1. Writing 162 MB
    of HTML is noise; computing `git_diff_tree_to_tree` + rename detection +
-   `git_patch_from_diff` for every commit is what burns the CPU – and it is
+   `git_patch_from_diff` for every commit is where the time goes – and it is
    only needed for the three little numbers per row in `log.html`.
-   ≈ 2.9 ms/commit here; expect 5–10 ms on the NAS.
+   ≈ 2.9 ms/commit here; expect 5–10 ms on a low-power server.
 2. `files.html` re-reads **every blob in HEAD** on **every run** (even an
    incremental one) to count lines: 0.5 s for 432 files; proportionally
    worse for repos with tens of thousands of files, and it happens on every
    change.
 3. Everything else (refs, atom) is negligible for this repo. With 10k+ tags,
    `getrefs()` loads one commit per tag (still cheap, ~ms per 1000).
-4. The cache only helps for fast-forward updates. Any rewrite, any new
-   version, any change to stagit itself → full re-render. For hundreds of repos this
-   is hours of CPU for pages nobody opens.
+4. The `-c` cache makes fast-forward updates cheap, which is the case stagit
+   is designed for. Any rewrite, any new version, any change to stagit
+   itself → full re-render. For hundreds of mirrors whose history may be
+   rewritten, most of that work is spent on pages that are rarely viewed.
 
 What streagit changes: the only work done is for the page requested. A log
 page costs `page_size` diffs (≈ 50 × 3–10 ms) the first time and nothing the
@@ -164,7 +170,7 @@ Single static binary (`streagit`), no runtime dependencies, no disk writes
 | concern | crate | notes |
 |---|---|---|
 | async runtime | `tokio` (rt-multi-thread, net, sync, time, signal) | |
-| HTTP | `axum` 0.8 (on `hyper` 1.x) + `tower` + `tower-http` | routing, `Body::from_stream`, `ConcurrencyLimitLayer`, `TimeoutLayer`, `CompressionLayer` (gzip/br; the 30 MB page compresses ~10×), `TraceLayer` |
+| HTTP | `axum` 0.8 (on `hyper` 1.x) + `tower` + `tower-http` | routing, `Body::from_stream`, `ConcurrencyLimitLayer`, `TimeoutLayer`, `CompressionLayer` (gzip; the 30 MB page compresses ~10×), `TraceLayer` |
 | git | **`gix`** (gitoxide), features `max-performance-safe`, `blob-diff`, `revision` (see §3.2) | pure Rust, static musl build with nothing but `rustup target add x86_64-unknown-linux-musl` |
 | diff | `imara-diff` (re-exported through `gix::diff::blob`) | Myers / Histogram, `UnifiedDiff` helper for hunks |
 | CLI/config | `clap` (derive) + env | |
@@ -172,7 +178,7 @@ Single static binary (`streagit`), no runtime dependencies, no disk writes
 | time formatting | `jiff` (or `time`) – only fixed C-locale names needed | |
 | escaping | hand-written (stagit's 5-char table; must match exactly) | |
 | logging | `tracing` + `tracing-subscriber` (env filter) | |
-| hashing cache keys | `blake3` or `xxhash-rust` | |
+| hashing cache keys | `xxhash-rust` (xxh3) | |
 | errors | `anyhow` (bin), `thiserror` (lib) | |
 
 ### 3.2 git library: gix vs git2
@@ -253,7 +259,7 @@ Decision: **gix**, for these reasons:
   .for_each_to_obtain_tree()`, `change.diff(&mut cache)` → line counts /
   unified diff, `tree.lookup_entry_by_path`, `references()`.
 
-If the implementer hits a blocker in gix (e.g. a diff API gap), fall back to
+Fallback if gix turns out to have a blocker (e.g. a diff API gap):
 `git2` with `default-features = false` and the Dockerfile addition
 `apk add cmake make`; the output must not change (golden tests, §12).
 
@@ -439,11 +445,10 @@ Details, in order:
    class="i">+` ESCL(content) `\n</a>`; deleted (`new_lineno == -1`) →
    same with `class="d">-`; context → ` ` ESCL(content) `\n`.
    Line index `k` counts all lines of the hunk including context. The
-   "\ No newline at end of file" marker lines libgit2 emits have both
-   line numbers -1 and are rendered as additions (`+\ No newline…`) and
-   even counted in `addcount`; streagit renders them as a plain context
-   line ` \ No newline at end of file` and does not count them –
-   **DEVIATION** (acceptable).
+   "\ No newline at end of file" marker line libgit2 emits takes the origin
+   of the line it follows (after `+` it is rendered and counted as an
+   addition, after `-` as a deletion, after context as context); streagit
+   matches this exactly (§17).
 
 Diff options (`commitinfo_getstats`):
 
@@ -460,7 +465,10 @@ Diff options (`commitinfo_getstats`):
   (xdiff). imara-diff's Myers may pick different but equivalent hunks for
   ambiguous inputs; counts should normally agree, byte-identical hunks are
   not required (§12).
-- Submodule entries (tree entries of kind commit) are ignored in diffs.
+- Submodule entries (tree entries of kind commit): despite
+  `GIT_DIFF_IGNORE_SUBMODULES`, libgit2 reports gitlink additions/changes
+  as deltas with the synthetic content `Subproject commit <id>\n`; streagit
+  does the same (§17).
 - Binary detection for a delta (libgit2 `git_str_is_binary` on the first
   8000 bytes of either side, plus "file > max_size(512 MB)"): §4.11.
 - Per-delta counts: a line with `old_lineno == -1` is an addition, with
@@ -539,9 +547,9 @@ the group is non-empty**:
 
 - Refs considered: `refs/heads/*` and `refs/tags/*` only. Symbolic refs
   are resolved; each ref is peeled to a commit (annotated tags → the
-  tagged commit; packed-refs `^` peel lines can be used). A tag that
-  peels to a non-commit (tree/blob) makes stagit **stop** iterating (bug);
-  streagit skips it – **DEVIATION**.
+  tagged commit; packed-refs `^` peel lines can be used). At a tag that
+  peels to a non-commit (tree/blob) stagit stops iterating, so later refs
+  are not listed; streagit skips just that tag – **DEVIATION**.
 - Sort: branches before tags; within a group by **author** time
   descending, then by shorthand name ascending (`strcmp`).
 - `shorthand` = ref name without `refs/heads/` / `refs/tags/`.
@@ -559,7 +567,7 @@ the group is non-empty**:
   file if present, else the directory two levels up the slot). Default
   `slot`.
 - `DESC`: first line of `<repo>/description` (stagit: `fgets` into a 255
-  byte buffer, trailing newline **kept**, which leaks into `<title>`).
+  byte buffer, trailing newline **kept**, so it ends up in `<title>`).
   streagit: first line, trimmed, max 255 bytes – **DEVIATION**.
 - `URL`: first line of `<repo>/url`, newline stripped (stagit), max 1023
   bytes.
@@ -726,7 +734,7 @@ segment positions, try from the rightmost; a candidate is accepted iff
 `style.css`, `logo.png`, `favicon.png` are served for any resolved repo
 prefix *without* requiring the repo to exist? No: resolve the repo first
 (cheap stat), 404 otherwise, so the asset routes can't be used to probe.
-Response: `Cache-Control: public, max-age=86400`, strong ETag = blake3 of
+Response: `Cache-Control: public, max-age=86400`, strong ETag = xxh3 of
 the content, `Content-Type` `text/css; charset=utf-8` / `image/png`.
 
 ### 5.4 Path safety
@@ -860,8 +868,8 @@ not shown.</p>` with a `raw/<path>` link if M3 is implemented –
 `GET <prefix>/` lists all repos below the root (`<table id="index">`, same
 structure as stagit-index: name linking to `<slot>/html/log.html`,
 description, owner, last commit date). Discovery = walking the root for
-`*.git/HEAD` (cached for `--index-ttl`, default 10 min). gitbackup has its
-own index and landing pages, so this is off by default (`--index`).
+`*.git/HEAD`. Not implemented in v0.1 (there is no `--index` flag);
+gitbackup has its own index and landing pages.
 
 ---
 
@@ -987,22 +995,18 @@ commits not yet in the cache.
 ### 8.4 Persistent stats (optional)
 
 `--cache-dir <dir>`: the stats cache is persisted so that log pages stay
-cheap across restarts and container rebuilds (the NAS restarts gitbackup on
-every deploy). Format: one append-only file per repo
-(`<cache-dir>/<blake3(canonical repo path)[..16]>.stats`, records of
-`[oid 20][files u32][adds u32][dels u32]` little-endian = 32 bytes), loaded
-on first use of the repo (bounded by `--stats-entries` overall; load the
-tail if larger), appended under a mutex with `O_APPEND` writes of whole
-records, fsync not required (a torn record at the end is detected by
-length and dropped). No deletion needed: object ids never change meaning;
-the file grows by 32 bytes per commit ever viewed in a log page. A
-`streagit --stats-prune` subcommand could drop records whose commits are
-unreachable, but it is not needed for v1.
-
-Hashing the canonical path means `repo.v1.git` (same objects, different
-dir) has its own file – acceptable (the objects are the same, so
-optionally key by the repo's **object store identity**: the canonical
-path of the last alternate, i.e. the base repo. Nice-to-have).
+cheap across restarts and container rebuilds. Format (as implemented): a
+single append-only file for all repositories, `<cache-dir>/stats.v1.bin`
+(object ids are globally unique, so no per-repo files are needed), records
+of `[oid 20][files u32][adds u32][dels u32]` little-endian = 32 bytes; blob
+line counts share the file (`files = u32::MAX` marks them). The tail is
+loaded when the file holds more than `--stats-entries` records; whole
+records are appended under a mutex, fsync is not required (a torn record at
+the end is detected by length and dropped). No deletion needed: object ids
+never change meaning; the file grows by 32 bytes per commit ever viewed in
+a log page. A `--stats-prune` subcommand could drop records whose commits
+are unreachable; not implemented. Hashing (cache keys, ETags) uses
+`xxhash-rust` (xxh3) throughout; there is no blake3 dependency.
 
 ### 8.5 Repository handle cache
 
@@ -1023,7 +1027,7 @@ reads; could be cached by mtime, not needed).
 ## 9. Concurrency and resource limits
 
 - **Render pool**: `--render-threads` (default `max(1, cores/4)`,
-  gitbackup NAS: 2). Implemented as a `tokio::sync::Semaphore` with that
+  e.g. 2 on a small server). Implemented as a `tokio::sync::Semaphore` with that
   many permits around `spawn_blocking` (tokio's blocking pool is sized ≥
   that). A request waits for a permit at most `--queue-timeout` (default
   10 s) with at most `--max-queue` (default 32) waiters; beyond that → 503
@@ -1032,7 +1036,8 @@ reads; could be cached by mtime, not needed).
 - **Per-request limits**: §6.3, §6.5, §7.3.
 - **Connection limits**: hyper defaults + `--max-connections` (default
   256) via `tower::limit::ConcurrencyLimitLayer` on the whole service;
-  request body size 0 (GET only); header timeout 10 s.
+  request body size 0 (GET only). (A header read timeout was planned but
+  is not implemented in v0.1.)
 - **Single-flight**: concurrent requests for the same cache key share one
   render (a `DashMap<Key, broadcast>`-style "in-flight" map; the second
   request waits for the first's result and serves it from the cache; if
@@ -1044,9 +1049,9 @@ reads; could be cached by mtime, not needed).
   competes with gitbackup's fetches. Document both.
 - **robots.txt**: served at `<prefix>/robots.txt` as
   `User-agent: *\nDisallow: /` by default (`--robots allow` to open);
-  gitbackup is a private backup browser and crawlers are the main CPU
-  risk. The reverse proxy must forward it (gitbackup currently has no
-  robots.txt; it should proxy `/robots.txt` too, or serve its own).
+  a backup browser is usually private and crawlers are the main CPU
+  risk. Crawlers only read `/robots.txt` at the host root, so a reverse
+  proxy in front should map `/robots.txt` to it (or serve its own).
 
 ---
 
@@ -1078,7 +1083,7 @@ streagit/
     render/
       out.rs                 Out trait, esc/escl/pct, fmt helpers
       header.rs              writeheader/writefooter
-      log.rs  commit.rs  files.rs  blob.rs  refs.rs  atom.rs  index.rs
+      log.rs  commit.rs  files.rs  blob.rs  refs.rs  atom.rs
       time.rs                printtime / printtimeshort / printtimez
     cache/
       render.rs              bytes-bounded LRU
@@ -1086,11 +1091,12 @@ streagit/
       inflight.rs            single-flight
   assets/style.css logo.png favicon.png     from stagit 1.3 (MIT)
   tests/
-    fixtures.rs              builds fixture repos with `git` CLI at test time
-    golden/…                 stagit 1.3 output for the fixture (checked in)
-    golden_test.rs  http_test.rs  resolve_test.rs
-  benches/log_page.rs        criterion (optional)
-  Dockerfile  LICENSE  README.md  SPEC.md
+    fixtures/make_fixture.sh builds the fixture repos with the `git` CLI at test time
+    common/mod.rs            shared test helpers (fixture setup, test server)
+    golden/…                 stagit 1.3 output for the fixture (checked in), gen.sh
+    golden_test.rs  http_test.rs   (resolution unit tests live in src/http/resolve.rs)
+  scripts/bench.sh           latency comparison against stagit on a real repository
+  Dockerfile  LICENSE  LICENSE-stagit  THIRD-PARTY-LICENSES.md  README.md  SPEC.md
 ```
 
 Key types:
@@ -1131,7 +1137,7 @@ Flags (clap), each also readable from `STREAGIT_<NAME>` env:
 
 | flag | default | meaning |
 |---|---|---|
-| `--listen ADDR` | `127.0.0.1:8081` | bind address (TCP); `--listen unix:/run/streagit.sock` optional |
+| `--listen ADDR` | `127.0.0.1:8081` | bind address (TCP only) |
 | `--root DIR` | required | data root containing the slots |
 | `--prefix PATH` | `/` | URL prefix stripped before resolution (`/browse` for gitbackup) |
 | `--public-url URL` | – | absolute URL of `--prefix` as seen by users (`https://example.org/browse`), used for atom `href`s; if unset, atom links are relative (stagit's default) |
@@ -1146,28 +1152,31 @@ Flags (clap), each also readable from `STREAGIT_<NAME>` env:
 | `--max-blob-bytes` | 2MiB | blob page truncation |
 | `--max-diff-blob-bytes` / `--max-commit-diff-bytes` | 4MiB / 64MiB | |
 | `--max-files` | 20000 | files.html rows |
-| `--files-line-counts` | off | `NL` sizes like stagit |
+| `--files-line-counts` | off | `NL` sizes like stagit (plain switch, no value) |
 | `--feed-entries` | 100 | atom/tags entries |
 | `--name-from slot\|dir\|owner-slot` | slot | §4.9 |
 | `--assets-dir DIR` | embedded | override style.css/logo.png/favicon.png |
-| `--allow-git-paths` | on | direct `<x>.git` URLs (§5.2) |
-| `--link-refs` | on | refs.html names link to `log.html?ref=` |
-| `--index` / `--index-ttl` | off / 10m | §6.6 |
+| `--allow-git-paths true\|false` | true | direct `<x>.git` URLs (§5.2) |
+| `--link-refs true\|false` | true | refs.html names link to `log.html?ref=` |
 | `--robots allow\|disallow` | disallow | |
 | `--nice N` | 0 | |
-| `--compression` | on | gzip/br |
+| `--compression true\|false` | true | gzip only |
+| `--max-connections N` | 256 | concurrent connections |
 | `--log-level` | info | `RUST_LOG` compatible |
+
+Boolean options that default to on take an explicit value
+(`--allow-git-paths false`).
 
 Behind a reverse proxy: pages use **relative** links only, so no
 `X-Forwarded-*` handling is needed; `--public-url` is the only absolute
-URL. gitbackup already has `GITBACKUP_BROWSE_URL` for this.
+URL.
 
 ---
 
 ## 12. Testing
 
 1. **Fixture repos** built at test time with the `git` CLI
-   (`tests/fixtures.rs`): a bare repo with ≥ 30 commits covering: root
+   (`tests/fixtures/make_fixture.sh`, driven from `tests/common/mod.rs`): a bare repo with ≥ 30 commits covering: root
    commit, merge (first-parent diff), rename (exact), copy, typechange
    (file→symlink), binary file add/modify, submodule entry, non-UTF-8
    bytes in a path and in content, CRLF file, file without trailing
@@ -1200,14 +1209,14 @@ URL. gitbackup already has `GITBACKUP_BROWSE_URL` for this.
    `Range`/HEAD request; concurrency limit → 503; a slow client
    disconnecting cancels the render (channel closed); render timeout
    notice; large blob truncation; binary detection table (§4.11 cases).
-4. **Property tests** (proptest, small): `esc`/`pct` byte tables vs. a
-   straightforward reference; `printtime` vs. `chrono`/`jiff` for random
-   timestamps/offsets; `is_binary` vs. a C-translated reference.
-5. **Benchmarks** (criterion, `cargo bench`, optional in CI): log page
-   cold/warm, commit page for a big commit, files.html on a 20k-entry tree
-   – run against a real repo path from `STREAGIT_BENCH_REPO`.
-6. CI: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test`,
-   musl build, Docker build.
+4. **Unit tests** for the byte tables (`esc`/`pct`), time formatting and
+   `is_binary` live next to the code (`#[cfg(test)]`); there are no
+   property tests (proptest was considered, not used).
+5. **Benchmarks**: `scripts/bench.sh <repo.git>` compares per-page latency
+   with a full stagit render on a real repository; there is no criterion
+   suite.
+6. Checks: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`
+   (run in `rust:alpine`, see README). There is no hosted CI yet.
 
 ---
 
@@ -1217,133 +1226,85 @@ URL. gitbackup already has `GITBACKUP_BROWSE_URL` for this.
 
 ```sh
 docker run --rm -v "$PWD:/src" -w /src rust:alpine sh -c \
-  'apk add musl-dev && cargo build --release --target x86_64-unknown-linux-musl'
-# → target/x86_64-unknown-linux-musl/release/streagit  (fully static, ~6 MB stripped)
+  'apk add musl-dev && cargo build --release --locked'
+# → target/release/streagit  (fully static, ~6 MB stripped)
 ```
 
 `rust:alpine` targets musl natively, so `cargo build --release` already
-yields a static binary; the explicit target is for cross-building from the
-Mac. `Cargo.toml` profile: `lto = "thin"`, `codegen-units = 1`,
+yields a static binary for the builder's architecture; an explicit
+`--target x86_64-unknown-linux-musl` is only needed when cross-building. `Cargo.toml` profile: `lto = "thin"`, `codegen-units = 1`,
 `strip = true`, `panic = "abort"` is **not** used (panics in a render must
 be caught per request: `spawn_blocking` returns `JoinError`, map to 500).
 
 ### 13.2 Dockerfile (streagit standalone)
 
-```Dockerfile
-FROM rust:alpine AS build
-RUN apk add --no-cache musl-dev
-WORKDIR /src
-COPY Cargo.toml Cargo.lock ./
-COPY src ./src
-COPY assets ./assets
-RUN cargo build --release --locked
-FROM alpine:3
-COPY --from=build /src/target/release/streagit /usr/local/bin/streagit
-USER 1000
-EXPOSE 8081
-ENTRYPOINT ["streagit"]
-CMD ["--listen", "0.0.0.0:8081", "--root", "/data/data", "--prefix", "/browse"]
+See the `Dockerfile` in the repository: a `rust:alpine` build stage
+(`cargo build --release --locked`, stripped) and an `alpine:3` runtime
+stage with `tini` as PID 1, the binary in `/usr/local/bin`, the license
+files (`LICENSE`, `LICENSE-stagit`, `THIRD-PARTY-LICENSES.md`) in
+`/usr/share/licenses/streagit/`, `USER 1000:1000`, `EXPOSE 8081` and the
+default command `--listen 0.0.0.0:8081 --root /data --prefix /browse`
+(`0.0.0.0` inside the container so that a published port reaches it; bind
+the published port to `127.0.0.1` on the host unless something in front
+authenticates, see README "Security").
+
+### 13.3 Example: running behind another web server (e.g. gitbackup)
+
+streagit is meant to sit next to an existing web server that already serves
+the data root (in gitbackup's case Go's `http.FileServer` under `/browse/`).
+Run streagit on loopback with the same prefix (`--listen 127.0.0.1:8081
+--root <data> --prefix /browse --public-url <public URL of /browse>
+--cache-dir <state dir>`) and let the front server reverse-proxy every path
+that names an HTML or git directory, unchanged, to it; everything else stays
+with the front server. A rule that covers all URL forms of §5.2:
+
+```
+(^|/)(html(\.[A-Za-z0-9_~+-]+)*(\.v[0-9]+)?|[^/]+\.git)(/|$)
 ```
 
-### 13.3 gitbackup integration (changes to gitbackup, to be done separately)
-
-Goal: identical URLs, no pre-rendering. In gitbackup's Dockerfile replace
-the `stagit` build stage by a `streagit` stage (or `COPY --from=
-ghcr.io/marvambass/streagit:<tag>`), and:
-
-1. **Spawn** streagit as a child process from gitbackup (`exec.Command`
-   with `--listen 127.0.0.1:8081 --root <data> --prefix /browse
-   --public-url $GITBACKUP_BROWSE_URL --cache-dir <state>/streagit
-   --nice 10`), restart it on exit, or run both under a tiny init
-   (`tini`/`s6`). Child process is simplest (one container, one image).
-2. **Reverse-proxy** in `internal/web/web.go`: register
-   `GET /browse/{path...}` so that paths whose segments contain
-   `html`, `html.vN`, `html.<unit>[.vN]` or end in `.git/…` go to
-   `httputil.NewSingleHostReverseProxy("http://127.0.0.1:8081")`
-   (unchanged path), everything else to the existing `http.FileServer`.
-   Simplest robust rule: proxy when the path matches
-   `(^|/)(html(\.[A-Za-z0-9_~+-]+)*(\.v[0-9]+)?|[^/]+\.git)(/|$)`.
-   Also proxy `/robots.txt`.
-3. `internal/stagit`: `Build`/`BuildVersion` become no-ops (or are
-   removed with the `stagit_dirty` plumbing); `Index()` keeps generating
-   landing pages but links `html/log.html` etc. **unconditionally** when
-   streagit is enabled (today it checks for `html/log.html` on disk:
-   `HasHTML`, `version.HTML`). The `assets()` copies of
-   `style.css`/`logo.png`/`favicon.png` into every html dir are no longer
-   needed (streagit serves them); `data/style.css` + `favicon.png` for
-   gitbackup's own index pages stay (or gitbackup passes
-   `--assets-dir` so both use the same style).
-4. Old `html/`, `html.vN/` directories: leave them (ignored, the proxy
-   route wins) or delete them in a one-off reconcile step to reclaim
-   disk (162 MB per ComfyUI-sized repo!).
-5. Config: `settings.stagit: true` → keep the key, meaning "serve
-   browsable pages"; plan-level `stagit.on_change/every` become obsolete.
-6. Wiki pages come for free: link `html.wiki/log.html` on the landing page.
-
-What can be dropped vs. stagit: the per-commit and per-file files, the
-`.stagit-cache`, the full-rebuild-on-rewrite, the asset copies, the
-`StagitDirty`/`StagitRebuild`/`StagitBuilt` scheduling, the 2 h timeout
-per build. What stays for compatibility: the URL names, the HTML
-structure/ids/classes, `style.css` selectors, relative-link convention
-(`../` to the slot landing page), `description`/`url`/`owner` files,
-`-u`-style absolute feed links.
+Also map `/robots.txt` (crawlers only read it at the host root) and,
+optionally, `<prefix>/healthz` and `<prefix>/metrics`. Pre-rendered `html/`
+directories can then be removed; the URL names, the HTML ids/classes, the
+`style.css` selectors and the relative-link convention (`../` to the slot's
+landing page) stay as they were, so existing links keep working.
 
 ---
 
 ## 14. Milestones
 
-1. **M1 – read-only core** (end-to-end for gitbackup): resolve, repo
-   cache, log page with `from=` paging + diffstat cache, commit page,
-   files page (bytes), blob page, refs page, atom/tags, assets, 404/500,
-   ETag/304, render cache, streaming with cancellation, limits (§6/§7/§9),
-   config, Dockerfile, golden tests for the fixture, musl build.
-2. **M2 – polish**: `?ref=` logs + linked refs, persistent stats cache,
-   single-flight, `--files-line-counts`, robots, nice, HEAD fallbacks,
-   `html.<unit>` wikis, compression, metrics endpoint (`/metrics`,
-   Prometheus text: renders, cache hits, render seconds, queue drops).
-3. **M3 – extras**: `raw/<path>`, `tree/<dir>/` pages, index page,
-   `?page=K`, pre-compressed cache entries, `--stats-prune`, SHA-256 repos.
+M1 (read-only core), most of M2 (`?ref=`, persistent stats, single-flight,
+`--files-line-counts`, robots, nice, HEAD fallbacks, `html.<unit>`, gzip,
+`/metrics`) and `raw/<path>` from M3 are in v0.1; see the end of §17 for
+what is not implemented.
 
 ---
 
-## 15. Open questions / things the implementer should verify
+## 15. Open questions
 
-- gix API details change between versions; the names used here
-  (`rev_walk().sorting(..)`, `tree.changes().options(|o| o.track_rewrites(..))
-  .for_each_to_obtain_tree(..)`, `change.diff(&mut cache)?.line_counts()`,
-  `gix::diff::blob::UnifiedDiff`, `find_header`) were compiled/run against
-  gix 0.89.0 (the walk+line-count part, §3.2) or checked in its docs
-  (`UnifiedDiff`, `find_header`, `lookup_entry_by_path`); re-check against
-  the pinned version. Keep gix's default cargo features on (the hash
-  algorithm is a feature; `default-features = false` fails to build).
-- Whether gix's `line_counts()` treats "no newline at end of file"
-  exactly like libgit2 (off-by-one in rare files) – the golden test on the
-  fixture file without a trailing newline will tell.
-- libgit2's `GIT_DIFF_FIND_COPIES` default copy source: libgit2 looks for
-  copy sources among *all* files unless `GIT_DIFF_FIND_COPIES_FROM_UNMODIFIED`
-  is set – i.e. only among modified files by default. gix's
-  `CopySource::FromSetOfModifiedFiles` is the counterpart. Confirm with the
-  fixture (copy of an unmodified file must show as `A`, copy of a modified
-  file as `C`).
-- Exact delta ordering for renames in libgit2 (by old path or new path)
-  only matters for the `#hN` anchors; not important.
-- The gitbackup reverse-proxy rule and `HasHTML` change (§13.3) are
-  gitbackup's side; agree on the proxy rule before relying on
-  `html.wiki`.
-- NAS numbers: the 2.9 ms/commit figure is from an M-series laptop; measure
-  on the NAS once M1 runs (`/metrics`).
+Answered during implementation (details in §17): gix API names (pinned to
+`gix =0.89.0`), "no newline at end of file" counting, the copy source set
+(streagit detects exact copies itself), submodule deltas. Still open:
+
+- Exact delta ordering for renames in libgit2 (by old or new path) only
+  matters for the `#hN` anchors; not important.
+- Performance on slow hardware (spinning disks, low-power CPUs): the
+  figures in §2 and the README were measured on an Apple Silicon laptop;
+  `/metrics` exposes render times for measuring elsewhere.
+- SHA-256 repositories are accepted syntactically but untested.
 
 ---
 
 ## 16. License and attribution
 
-streagit is MIT licensed. The HTML structure, the CSS (`assets/style.css`),
-`logo.png` and `favicon.png` are taken from **stagit** by Hiltjo Posthuma,
-MIT/X Consortium License, (c) 2015-2026 Hiltjo Posthuma
-<hiltjo@codemadness.org>. The stagit copyright notice and permission
-notice must be reproduced in streagit's `LICENSE` (second section) and
-`README.md` must say that the page layout and stylesheet are derived from
-stagit. No stagit C code is copied; the output format is re-implemented.
+streagit is MIT licensed (`LICENSE`). `assets/style.css`, `assets/logo.png`
+and `assets/favicon.png` are copied unchanged from **stagit** 1.3 by Hiltjo
+Posthuma, and the HTML page structure follows stagit's output; stagit is
+under the MIT/X Consortium License, (c) 2015-2026 Hiltjo Posthuma
+<hiltjo@codemadness.org>. Its copyright and permission notice is reproduced
+in `LICENSE-stagit`, and `README.md` credits stagit. No stagit C code is
+copied; the output format is re-implemented. Licenses of the Rust crates
+compiled into the binary are collected in `THIRD-PARTY-LICENSES.md`
+(generated with `scripts/third-party-licenses.sh`).
 
 ---
 
@@ -1379,7 +1340,7 @@ Fidelity (found by the golden test, now matched exactly):
 - `<hr/>` is printed once before the first `diff --git`, not per delta.
 - A final blob line without `\n` is written without one (`…</pre>`); `log.html`
   and `files.html` end with `</tbody></table>` directly followed by the footer.
-- A tag pointing at a tree makes stagit stop iterating refs (§4.8); the
+- stagit stops iterating refs at a tag that points at a tree (§4.8); the
   fixture names it `zz-tree-tag` so that stagit still lists the real tags and
   the golden refs/tags pages are comparable. streagit skips such tags.
 
@@ -1411,12 +1372,10 @@ Design choices:
 - Compression is gzip only (`tower-http`); ETags stay strong.
 - `--allow-git-paths` requires `<name>.git` to match `[A-Za-z0-9_.~+-]+`;
   `html.<unit>` rejects units that look like versions (`v<digits>`).
-- Build: `cargo-cache`/`streagit-target` Docker volumes keep the registry and
-  target directory; the registry volume was reused from the §3.2 experiment.
 
-Review fixes (found by attacking the first implementation with synthetic
-repositories: 20k tags, 100k-file commits, 100 MB blobs, a 3,000-deep tree,
-a 1 MB commit message, HTML in every user-controlled field):
+Hardening (v0.1.1) – changes after stress tests with synthetic repositories
+(20k tags, 100k-file commits, 100 MB blobs, a 3,000-deep tree, a 1 MB commit
+message, HTML in every user-controlled field):
 
 - **Paging continuity** (§6.2): starting the walk at `?from=<oid>` alone drops
   commits. The date-ordered walk pops one branch's commit while the other
