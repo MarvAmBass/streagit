@@ -6,7 +6,7 @@
 #
 # Inside the container streagit listens on 0.0.0.0 so that the published port
 # reaches it; `-p 127.0.0.1:8081:8081` keeps it reachable from the host only.
-# streagit has no authentication – see "Security" in README.md.
+# No authentication by default (optional basic auth) – see "Security" in README.md.
 #
 # The build stage targets the native architecture of the builder (x86_64 or
 # aarch64); `--platform` selects it. rust:alpine links musl statically.

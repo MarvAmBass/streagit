@@ -6,8 +6,10 @@ directory of bare git repositories – on demand and streaming, instead of
 pre-rendering them to static files. It serves the pages stagit would write
 (`log.html`, `files.html`, `refs.html`, `commit/<id>.html`, `file/<path>.html`,
 `atom.xml`, `tags.xml`) straight from the repositories at request time. Nothing
-is written to disk; results are cached in memory keyed by immutable git object
-ids.
+is written to disk (the repositories can be mounted read-only); results are
+cached in memory keyed by immutable git object ids. Optionally it serves a
+`stagit-index`-style overview of all repositories and asks for a login (HTTP
+basic auth).
 
 streagit is a re-implementation of the output of
 [stagit](https://codemadness.org/stagit.html) by Hiltjo Posthuma. It is not
@@ -29,7 +31,8 @@ keep working.
 
 **Status:** v0.1 – early, but tested against stagit's output and real
 repositories. SHA-256 repositories are untested; HTTP `Range` requests are not
-supported; there is no authentication (see [Security](#security)).
+supported; authentication is optional HTTP basic auth (see
+[Security](#security)).
 
 ## Quick start
 
@@ -50,17 +53,23 @@ docker run --rm -p 127.0.0.1:8081:8081 -v ~/git:/data:ro streagit \
 ```
 
 Every `<dir>.git` below the root is reachable as `<prefix>/<path>/<dir>.git/`
-(e.g. `~/git/team/tool.git` → `/team/tool.git/log.html`). With such a plain
-layout, `--name-from dir` names each repository after its directory. The
+(e.g. `~/git/team/tool.git` → `/team/tool.git/log.html`). Bare repositories
+whose directory name does not end in `.git` (`~/git/team/app`) are served as
+`/team/app/log.html` with `--allow-bare-dirs true` (on by default when
+`--index true`). With such a plain layout, `--name-from dir` (`tool`) or
+`--name-from path` (`team/tool`) names each repository sensibly; the default
+`slot` naming is meant for the gitbackup layout and would show `team`. The
 optional files `description`, `url` and `owner` inside a repository are shown
 in the page header like stagit does.
+
+`--index true` adds an overview page at `<prefix>/` (see [Index page](#index-page)).
 
 ## Install
 
 There are no prebuilt binaries or images; build from source:
 
 ```sh
-cargo install --git https://github.com/MarvAmBass/streagit --tag v0.1.3
+cargo install --git https://github.com/MarvAmBass/streagit --tag v0.1.4
 ```
 
 or build the static binary or the Docker image without a local Rust
@@ -84,7 +93,12 @@ repository folder is called a *slot*:
 <root>/github.com/<owner>/repos/<name>/wiki.v1.git     -> .../html.wiki.v1/log.html
 <root>/github.com/<owner>/repos/<name>/forks/x/repo.git -> .../forks/x/html/log.html
 any <dir>.git below the root                          -> <prefix>/<dir>.git/log.html  (--allow-git-paths)
+any other bare repository directory <dir>             -> <prefix>/<dir>/log.html      (--allow-bare-dirs)
 ```
+
+A directory counts as a bare repository when it has a `HEAD` file and
+`objects/` and `refs/` directories; a directory inside another repository
+never does.
 
 Each repository may contain the plain-text files `description`, `url` and
 `owner` (first line used). `objects/info/alternates` with relative paths,
@@ -105,6 +119,7 @@ are ignored.
 | `atom.xml`, `tags.xml` | feeds (`--public-url` makes the links absolute) |
 | `style.css`, `logo.png`, `favicon.png` | embedded stagit assets, or from `--assets-dir` |
 | `<prefix>/healthz`, `<prefix>/metrics`, `<prefix>/robots.txt` | health, Prometheus metrics, robots policy (`--robots allow`) |
+| `<prefix>/`, `<prefix>/index.html`, `<prefix>/<dir>/` | repository overview (only with `--index true`) |
 
 ### Options
 
@@ -131,15 +146,58 @@ Options that default to on take an explicit value (`--allow-git-paths false`,
 | `--max-files` | 20000 | rows on files.html |
 | `--files-line-counts` | off | `NL` sizes on files.html like stagit (reads every blob) |
 | `--feed-entries` | 100 | entries in atom.xml / tags.xml |
-| `--name-from` | `slot` | repository name shown: `slot`, `dir` (stagit's `repo.git` → `repo`), `owner-slot` |
+| `--name-from` | `slot` | repository name shown: `slot`, `dir` (stagit's `repo.git` → `repo`), `owner-slot`, `path` (path below the root without `.git`) |
 | `--assets-dir` | embedded | directory with `style.css`, `logo.png`, `favicon.png` |
 | `--allow-git-paths true\|false` | true | direct `<name>.git/...` URLs |
+| `--allow-bare-dirs true\|false` | value of `--index` | serve bare repositories whose directory name has no `.git` suffix |
+| `--index true\|false` | false | overview of all repositories at `<prefix>/` |
+| `--index-depth` | 3 | directory levels below the root searched for the index |
+| `--index-ttl` | 60s | the repository list is rebuilt at most this often |
+| `--exclude` | – | path or glob below the root that is neither listed nor served; repeatable, `STREAGIT_EXCLUDE` is comma-separated |
+| `--auth-file` | – | `user:password` lines; enables basic auth (see [Security](#security)) |
 | `--link-refs true\|false` | true | link ref names on refs.html to `log.html?ref=` |
 | `--robots` | `disallow` | robots.txt policy |
 | `--nice` | 0 | process niceness |
 | `--compression true\|false` | true | gzip responses |
 | `--max-connections` | 256 | concurrent connections |
 | `--log-level` | `info` | `RUST_LOG`-style filter |
+
+`STREAGIT_AUTH_USER` and `STREAGIT_AUTH_PASSWORD` (environment only, never a
+flag, so the password does not show up in `ps`) add one more basic-auth user.
+
+### Index page
+
+With `--index true`, `<prefix>/` lists every repository below `--root` in the
+format of stagit 1.3's `stagit-index` (same page structure, `style.css` and
+`logo.png`; columns Name, Description, Owner, Last commit) – byte-identical
+for repositories at the root level, which a golden test pins. Rules:
+
+- The root is walked up to `--index-depth` directory levels (`team/tool.git`
+  is level 2). Repositories are not descended into, hidden directories
+  (`.name`) are skipped, symlinked directories are followed only inside the
+  root, and every repository is listed once under its real path (symlink
+  loops are harmless).
+- The name is the path below the root without `.git` (`team/tool`); the link
+  points at the repository's own URL (`team/tool.git/log.html`,
+  `team/app/log.html`). Only repositories that streagit actually serves are
+  listed (e.g. suffix-less ones only with `--allow-bare-dirs`).
+- Description and owner come from the repository's `description` and `owner`
+  files (first line); Last commit is the author date of HEAD's commit, like
+  stagit-index. The list is sorted newest first, repositories without commits
+  last (stagit-index keeps the command line order and skips empty
+  repositories).
+- `<prefix>/<dir>/` shows the same page for the repositories below `<dir>`,
+  with names relative to it. The logo on a repository page links to `../`,
+  so for `team/tool.git` it leads to `<prefix>/team/`.
+- The list is built on the first request and reused for `--index-ttl`; the
+  page has an ETag like every other page.
+
+`--exclude PATTERN` hides repositories from the index *and* answers 404 for
+their URLs, also when they are reached through a symlink. A pattern is a path
+relative to the root and excludes everything below it (`mirrors` hides
+`mirrors/` completely); segments may use `*` and `?`, and `**` matches any
+number of directories (`**/scratch-*`). Excludes apply with and without
+`--index`.
 
 ### Caching and limits
 
@@ -165,14 +223,36 @@ Options that default to on take an explicit value (`--allow-git-paths false`,
 
 ## Security
 
-- streagit has **no authentication**. Every repository below `--root` is
-  readable by anyone who can reach the port – all pages, `raw/` blob
-  downloads, and `<prefix>/metrics`. Only point `--root` at repositories you
-  are willing to publish to that audience.
+- By default streagit has **no authentication**. Every repository below
+  `--root` (minus `--exclude`) is readable by anyone who can reach the port –
+  all pages, `raw/` blob downloads, and `<prefix>/metrics`. Only point
+  `--root` at repositories you are willing to publish to that audience.
+- **Optional HTTP basic auth**: `--auth-file PATH` (or `STREAGIT_AUTH_FILE`)
+  names a file with one `user:password` per line (blank lines and `#`
+  comments are ignored; the password is everything after the first `:`), and
+  `STREAGIT_AUTH_USER` + `STREAGIT_AUTH_PASSWORD` add one user from the
+  environment. A password may also be written as `sha256:<64 hex digits>`
+  (the SHA-256 of the password) so the file does not contain it in plain
+  text – a plain hash, not a slow password hash, so keep the file private
+  either way: plain passwords in a `chmod 600` file are fine. streagit
+  refuses to start when the file is unreadable or lists no user and warns
+  when it is readable by group or others.
+- With auth on, every request – pages, `raw/`, assets, `robots.txt`,
+  `/metrics` – needs valid credentials, otherwise `401` with
+  `WWW-Authenticate: Basic realm="streagit", charset="UTF-8"`; only
+  `<prefix>/healthz` stays public. Credentials are compared as SHA-256
+  digests in constant time against every user (no username enumeration by
+  timing). After 10 wrong logins in a row an IP address is locked out for 15
+  minutes (`429`); requests without credentials don't count. Behind a reverse
+  proxy all clients share the proxy's address, so a lockout affects
+  everybody – authenticate in the proxy instead if that matters. Responses
+  are sent with `Cache-Control: private` (ETags and `304` still work).
+- **Basic auth sends the credentials in clear text over plain HTTP.** Use
+  HTTPS (a TLS-terminating reverse proxy) whenever the network between the
+  browser and streagit is not trusted.
 - The default `--listen` is `127.0.0.1:8081`. To expose it, put a reverse
-  proxy with TLS (and authentication, if the repositories are private) in
-  front; streagit only uses relative links, so no `X-Forwarded-*` setup is
-  needed.
+  proxy with TLS in front; streagit only uses relative links, so no
+  `X-Forwarded-*` setup is needed.
 - In Docker, streagit must listen on `0.0.0.0` *inside* the container so a
   published port reaches it. Publish the port on loopback
   (`-p 127.0.0.1:8081:8081`), as in the examples, unless the host's firewall
@@ -183,6 +263,58 @@ Options that default to on take an explicit value (`--allow-git-paths false`,
 - Paths are resolved strictly below `--root`: `..`, encoded slashes and
   symlinks that escape the root are refused; only git's own files and
   `description`/`url`/`owner` are read from disk.
+- streagit **never writes to the repositories**: they can be mounted
+  read-only (`-v /srv/git:/repos:ro`); the only file it writes is the
+  optional diffstat cache in `--cache-dir`. Repositories owned by another
+  user than the streagit process (e.g. owned by root, streagit in a
+  container as uid 1000) work: gix opens them with reduced trust (no
+  `safe.directory` setup needed; their config is partly ignored), and
+  streagit lifts gix's 16 MiB object limit for such repositories since it
+  checks object sizes itself. A test runs the pages against a write-protected,
+  foreign-owned copy of the fixtures.
+
+## Example: personal repositories with login
+
+A second instance for a directory of personal bare repositories
+(`/srv/git/<owner>/<name>.git`, some without the `.git` suffix), mounted
+read-only, with an overview page and a login, `/srv/git/mirrors/` hidden:
+
+```sh
+# the image runs as uid 1000: it needs to read the auth file and write the cache
+install -d -o 1000 -g 1000 -m 700 /srv/streagit/cache
+install -o 1000 -g 1000 -m 600 /dev/null /srv/streagit/users
+echo 'me:a long random password' >> /srv/streagit/users
+
+docker run -d --name streagit-personal --restart unless-stopped \
+  -p 127.0.0.1:8082:8081 \
+  -v /srv/git:/repos:ro \
+  -v /srv/streagit/users:/run/streagit/users:ro \
+  -v /srv/streagit/cache:/cache \
+  streagit --listen 0.0.0.0:8081 --root /repos --cache-dir /cache \
+    --auth-file /run/streagit/users --index true --name-from path \
+    --exclude mirrors
+# open http://127.0.0.1:8082/ – through a TLS proxy when not on localhost
+```
+
+The same with Compose:
+
+```yaml
+services:
+  streagit:
+    image: streagit
+    restart: unless-stopped
+    ports: ["127.0.0.1:8082:8081"]
+    volumes:
+      - /srv/git:/repos:ro
+      - /srv/streagit/users:/run/streagit/users:ro
+      - /srv/streagit/cache:/cache
+    command: [--listen, "0.0.0.0:8081", --root, /repos, --cache-dir, /cache,
+              --auth-file, /run/streagit/users, --index, "true",
+              --name-from, path, --exclude, mirrors]
+```
+
+The repositories may belong to any user (e.g. root); read access for uid
+1000 is enough. Without `--cache-dir` nothing at all is written.
 
 ## Integration example: gitbackup
 
@@ -232,6 +364,9 @@ version and a nested fork borrowing objects via relative alternates, preserved
 escapes the root). `tests/golden/` holds stagit 1.3's output for that fixture;
 `golden_test.rs` renders every page with streagit and compares byte for byte
 (regenerate with `tests/golden/gen.sh`, which builds stagit in `alpine:3`).
+`tests/golden/index.html` is stagit-index's page for the plain-layout fixture
+`tests/fixtures/make_index_fixture.sh`, used by `index_auth_test.rs` together
+with the auth, exclude and read-only/foreign-owner tests.
 
 `scripts/bench.sh <repo.git>` compares per-page latency against a full
 stagit render on a real repository.
@@ -296,6 +431,9 @@ purpose streagit differs in a few places (all listed in `SPEC.md`):
 - `log.html` is paginated (`?from=`), `refs.html` names link to `log.html?ref=`;
 - `files.html` shows byte sizes unless `--files-line-counts` is on;
 - a tag that points at a tree is skipped instead of truncating the tag list;
+- the index page (stagit-index) is sorted newest first, lists repositories
+  without commits, names them by their path below the root and links
+  `<name>.git/log.html` where stagit-index would link `<name>/log.html`;
 - blobs and diffs have size limits; diffs use imara-diff's Myers, which can
   pick different but equivalent hunks for ambiguous inputs (counts match).
 

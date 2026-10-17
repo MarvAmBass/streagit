@@ -1412,7 +1412,51 @@ message, HTML in every user-controlled field):
 Scope (§14): M1 complete; from M2 `?ref=`/`--link-refs`, persistent stats,
 single-flight, `--files-line-counts`, robots, `--nice`, HEAD fallbacks,
 `html.<unit>`, gzip and `/metrics` are done; from M3 `raw/<path>`. Not
-implemented: `tree/<dir>/` pages, the index page (`--index`), `?page=K`,
+implemented: `tree/<dir>/` pages, `?page=K`,
 pre-compressed cache entries, `--stats-prune`, a unix socket listener, header
 read timeouts, `Range` requests, brotli. SHA-256 repositories: 64-hex ids are
 accepted syntactically but untested.
+
+Additions in v0.1.4 (all off by default; a setup without the new options
+behaves exactly as before):
+
+- **Index page** (§5, `--index true`): `<prefix>/` renders stagit 1.3's
+  `stagit-index` page (golden test `index_matches_stagit_index` against real
+  stagit-index output for root-level repositories). Deviations: newest first
+  by HEAD's author time instead of argument order; repositories without
+  commits are listed (stagit-index skips them); names are the path below the
+  root without `.git`; links point at the served URL (`x.git/log.html`, where
+  stagit-index assumes an output directory `x/`). `<prefix>/<dir>/` lists the
+  repositories below `<dir>` with relative names, so the `../` logo link of a
+  nested repository page lands on a useful page. Discovery walks the
+  canonical root up to `--index-depth` levels, skips hidden directories, does
+  not descend into repositories, follows symlinks only inside the root and
+  dedupes by canonical path; a candidate is listed only if the resolver maps
+  its URL back to the same git dir. The list is cached for `--index-ttl`
+  (one walk at a time, on the blocking pool); the page ETag is a hash of the
+  rendered page.
+- **Suffix-less bare repositories** (§5.2, `--allow-bare-dirs`, default =
+  `--index`): a URL segment that is a safe name (`[A-Za-z0-9_.~+-]`, not
+  starting with `.`) names a repository when the directory has `HEAD`,
+  `objects/` and `refs/`, and no ancestor below the root is such a directory
+  (no serving of git dirs nested in git dirs). Per segment the order is
+  `html*` mapping, `<name>.git`, plain directory; the rightmost match still
+  wins. `--name-from path` names a repository by its path below the root.
+- **`--exclude`**: patterns (segment globs `*`, `?`, `**`) match a path or
+  any parent directory; checked against the requested path of the git dir
+  and its canonical path, so excluded repositories 404 also via symlinks.
+- **Basic auth** (`--auth-file`, `STREAGIT_AUTH_USER`/`_PASSWORD`, env or file
+  only): an axum middleware outside compression; SHA-256 digests of user and
+  password compared with `subtle` against all users; per-IP lockout after 10
+  consecutive failures for 15 minutes (at most 10,000 tracked addresses);
+  `/healthz` public; `Cache-Control` rewritten to `private`. The server now
+  passes `ConnectInfo<SocketAddr>` for the client address.
+- **Read-only / foreign-owned repositories**: verified that nothing is
+  written below `--root`. gix opens repositories not owned by the current
+  user with reduced trust, which (besides ignoring parts of their config)
+  caps object allocations at 16 MiB – blobs between 16 MiB and
+  `--max-commit-diff-bytes` failed with a repository error. Repositories are
+  now opened with `gitoxide.objects.allocLimitIfReducedTrust=0`; streagit's
+  own header-based size checks apply as before. `read_only_and_foreign_owned_repositories`
+  runs the pages on a `chmod -R a-w` copy, `chown`ed to another uid when the
+  tests run as root (as in Docker), including a 20 MB blob.
