@@ -3,3 +3,5 @@ target
 tests
 *.md
 !README.md
+!THIRD-PARTY-LICENSES.md
+.DS_Store

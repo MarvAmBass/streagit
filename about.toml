@@ -1,0 +1,21 @@
+# cargo-about configuration for THIRD-PARTY-LICENSES.md
+# (regenerate with scripts/third-party-licenses.sh)
+accepted = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MPL-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "Zlib",
+    "BSL-1.0",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "ISC",
+    "CC0-1.0",
+    "Unlicense",
+]
+# the shipped binary: Linux/musl targets only, no dev or build dependencies
+targets = ["x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl"]
+ignore-dev-dependencies = true
+ignore-build-dependencies = true

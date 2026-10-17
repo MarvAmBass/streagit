@@ -1,6 +1,8 @@
 
-The page layout (HTML structure), `assets/style.css`, `assets/logo.png` and
-`assets/favicon.png` are derived from stagit (https://codemadness.org/stagit.html):
+`assets/style.css`, `assets/logo.png` and `assets/favicon.png` are copied
+unchanged from stagit 1.3 (https://codemadness.org/stagit.html), and the page
+layout (HTML structure) streagit generates follows stagit's output. stagit's
+license:
 
 MIT/X Consortium License
 
