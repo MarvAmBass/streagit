@@ -1,3 +1,4 @@
 /target
 *.log
 /tests/tmp
+.DS_Store
