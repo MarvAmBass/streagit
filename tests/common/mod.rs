@@ -36,6 +36,30 @@ pub fn fixture_root() -> &'static Path {
     })
 }
 
+/// The plain-layout fixture for the index tests (`tests/fixtures/make_index_fixture.sh`).
+pub fn index_fixture_root() -> &'static Path {
+    static ROOT: OnceLock<PathBuf> = OnceLock::new();
+    ROOT.get_or_init(|| {
+        let root = std::env::temp_dir()
+            .join(format!("streagit-index-fixture-{}", std::process::id()))
+            .join("root");
+        let script =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/make_index_fixture.sh");
+        let out = std::process::Command::new("sh")
+            .arg(&script)
+            .arg(&root)
+            .output()
+            .expect("run make_index_fixture.sh (needs sh and git)");
+        assert!(
+            out.status.success(),
+            "index fixture build failed:\n{}\n{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        root
+    })
+}
+
 /// Run `git` inside the fixture's main repo and return stdout.
 pub fn git(args: &[&str]) -> String {
     git_in("github.com/alice/repos/fixture/repo.git", args)

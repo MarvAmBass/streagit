@@ -17,6 +17,22 @@ pub struct RepoRef {
     pub git_dir: PathBuf,
     /// Slot path relative to the root (`github.com/a/repos/b`), `""` for direct `.git` paths at the root.
     pub slot: String,
+    /// Path of the git directory below the root as requested (`github.com/a/repos/b/repo.git`).
+    pub rel: String,
+}
+
+/// Open a bare repository for reading.
+///
+/// No user/system configuration or environment is consulted. Repositories
+/// owned by another user are opened with gix's reduced trust (their config is
+/// partly ignored), which also caps object allocations at 16 MiB; streagit
+/// enforces its own size limits from object headers, so that cap is lifted.
+/// Nothing is ever written to the repository.
+pub fn open_repo(git_dir: &Path) -> anyhow::Result<gix::ThreadSafeRepository> {
+    let opts = gix::open::Options::isolated()
+        .config_overrides(["gitoxide.objects.allocLimitIfReducedTrust=0"]);
+    gix::ThreadSafeRepository::open_opts(git_dir, opts)
+        .with_context(|| format!("open {}", git_dir.display()))
 }
 
 /// Metadata shown in the page header.
@@ -54,9 +70,7 @@ impl RepoCache {
         let shared = match shared {
             Some(r) => r,
             None => {
-                let opened =
-                    gix::ThreadSafeRepository::open_opts(git_dir, gix::open::Options::isolated())
-                        .with_context(|| format!("open {}", git_dir.display()))?;
+                let opened = open_repo(git_dir)?;
                 let arc = Arc::new(opened);
                 let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
                 guard.put(git_dir.to_path_buf(), arc.clone());
@@ -75,7 +89,7 @@ impl RepoCache {
     }
 }
 
-fn read_first_line(path: &Path, max: usize) -> Vec<u8> {
+pub fn read_first_line(path: &Path, max: usize) -> Vec<u8> {
     match std::fs::read(path) {
         Ok(data) => {
             let end = data.iter().position(|&c| c == b'\n').unwrap_or(data.len());
@@ -113,7 +127,10 @@ pub fn read_meta(r: &RepoRef, name_from: NameFrom) -> Meta {
         .filter(|s| !s.is_empty())
         .map(str::to_string);
     let name = match name_from {
-        NameFrom::Dir => dir_name,
+        NameFrom::Path if !r.rel.is_empty() => {
+            r.rel.strip_suffix(".git").unwrap_or(&r.rel).to_string()
+        }
+        NameFrom::Dir | NameFrom::Path => dir_name,
         NameFrom::Slot => slot_name.unwrap_or(dir_name),
         NameFrom::OwnerSlot => {
             let slot = slot_name.unwrap_or(dir_name);

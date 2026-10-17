@@ -927,6 +927,7 @@ async fn render_timeout_notice() {
         &streagit::git::repo::RepoRef {
             git_dir: root.clone(),
             slot: "fixture".into(),
+            rel: "fixture/repo.git".into(),
         },
         streagit::config::NameFrom::Slot,
     );

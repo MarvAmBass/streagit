@@ -2,7 +2,8 @@ use clap::Parser;
 use streagit::config::Config;
 
 fn main() -> anyhow::Result<()> {
-    let cfg = Config::parse();
+    let mut cfg = Config::parse();
+    cfg.load_env();
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(cfg.log_level.clone()));
     tracing_subscriber::fmt()

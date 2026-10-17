@@ -54,6 +54,11 @@ pub struct AppState {
     pub assets: Assets,
     pub tv: String,
     pub metrics: Metrics,
+    pub excludes: crate::exclude::Excludes,
+    /// `Some` with `--index true`.
+    pub index: Option<crate::index::IndexCache>,
+    /// `Some` when basic auth is configured.
+    pub auth: Option<crate::auth::Auth>,
 }
 
 impl AppState {
@@ -65,7 +70,17 @@ impl AppState {
             Some(dir) => StatsCache::with_dir(cfg.stats_entries, dir)?,
             None => StatsCache::new(cfg.stats_entries),
         };
+        let auth = crate::auth::Auth::load(
+            cfg.auth_file.as_deref(),
+            cfg.auth_user.as_deref(),
+            cfg.auth_password.as_ref().map(|s| s.0.as_str()),
+        )?;
         Ok(AppState {
+            excludes: crate::exclude::Excludes::new(&cfg.exclude),
+            index: cfg
+                .index
+                .then(|| crate::index::IndexCache::new(cfg.index_ttl)),
+            auth,
             prefix: cfg.prefix(),
             tv: cfg.template_version(),
             repos: RepoCache::new(cfg.open_repos, cfg.object_cache_bytes as usize),
@@ -84,6 +99,40 @@ impl AppState {
             canonical_root,
             cfg,
         })
+    }
+
+    /// Whether a resolved repository is hidden by `--exclude` (by the requested
+    /// path or by where it really is).
+    fn excluded(&self, r: &crate::git::repo::RepoRef) -> bool {
+        if self.excludes.is_empty() {
+            return false;
+        }
+        let canon = r
+            .git_dir
+            .strip_prefix(&self.canonical_root)
+            .ok()
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        self.excludes.is_excluded(&r.rel) || self.excludes.is_excluded(&canon)
+    }
+
+    /// The index's repository list (cached for `--index-ttl`).
+    pub async fn index_entries(self: &Arc<Self>) -> Option<Arc<Vec<crate::index::Entry>>> {
+        let cache = self.index.as_ref()?;
+        let st = self.clone();
+        Some(
+            cache
+                .get(move || {
+                    crate::index::build(&crate::index::Discovery {
+                        root: &st.canonical_root,
+                        depth: st.cfg.index_depth,
+                        excludes: &st.excludes,
+                        allow_git_paths: st.cfg.allow_git_paths,
+                        allow_bare_dirs: st.cfg.allow_bare_dirs(),
+                    })
+                })
+                .await,
+        )
     }
 
     fn limits(&self) -> crate::git::diff::Limits {
@@ -499,8 +548,8 @@ fn pct_str(s: &str) -> String {
     String::from_utf8_lossy(&v.0).into_owned()
 }
 
-fn etag_matches(req: &Request, etag: &str) -> bool {
-    req.headers()
+fn etag_matches(headers: &axum::http::HeaderMap, etag: &str) -> bool {
+    headers
         .get_all(header::IF_NONE_MATCH)
         .iter()
         .filter_map(|v| v.to_str().ok())
@@ -622,6 +671,86 @@ fn metrics_text(state: &AppState) -> String {
     )
 }
 
+fn asset_response(
+    headers: &axum::http::HeaderMap,
+    asset: &super::assets::Asset,
+    is_head: bool,
+) -> Response<Body> {
+    if etag_matches(headers, &asset.etag) {
+        let mut r = Response::new(Body::empty());
+        *r.status_mut() = StatusCode::NOT_MODIFIED;
+        r.headers_mut()
+            .insert(header::ETAG, HeaderValue::from_str(&asset.etag).unwrap());
+        return r;
+    }
+    let body = if is_head {
+        Body::empty()
+    } else {
+        Body::from(asset.body.clone())
+    };
+    let mut r = Response::new(body);
+    let h = r.headers_mut();
+    h.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static(asset.content_type),
+    );
+    h.insert(header::CONTENT_LENGTH, HeaderValue::from(asset.body.len()));
+    h.insert(header::ETAG, HeaderValue::from_str(&asset.etag).unwrap());
+    h.insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("public, max-age=86400"),
+    );
+    r
+}
+
+/// `--index`: the overview for `rest` (`/`, `/index.html`, `/<dir>/`,
+/// `/<dir>/index.html`; `/<dir>` redirects). `None` when it is not an index path.
+async fn index_page(
+    state: &Arc<AppState>,
+    headers: &axum::http::HeaderMap,
+    is_head: bool,
+    rest: &str,
+) -> Option<Response<Body>> {
+    let (segs, trailing) = split_path(rest).ok()?;
+    let mut dir: Vec<String> = segs
+        .into_iter()
+        .map(String::from_utf8)
+        .collect::<Result<_, _>>()
+        .ok()?;
+    let explicit = dir.last().is_some_and(|l| l == "index.html");
+    if explicit {
+        dir.pop();
+    }
+    let dir = dir.join("/");
+    if !dir.is_empty() && state.excludes.is_excluded(&dir) {
+        return None;
+    }
+    let entries = state.index_entries().await?;
+    let body = crate::index::render(&entries, &dir)?;
+    if !dir.is_empty() && !trailing && !explicit {
+        return Some(redirect(format!("{}{}/", state.prefix, rest)));
+    }
+    let head = PageHead {
+        key: String::new(),
+        etag: format!(
+            "\"idx-{:016x}-{}\"",
+            xxhash_rust::xxh3::xxh3_64(&body),
+            state.tv
+        ),
+        content_type: "text/html; charset=utf-8",
+        cache_control: "public, max-age=60, must-revalidate",
+        last_modified: None,
+        deadline: Instant::now(),
+    };
+    if etag_matches(headers, &head.etag) {
+        state.metrics.not_modified.fetch_add(1, Ordering::Relaxed);
+        let mut r = Response::new(Body::empty());
+        *r.status_mut() = StatusCode::NOT_MODIFIED;
+        return Some(with_headers(r, &head));
+    }
+    Some(full_response(&head, Bytes::from(body), is_head))
+}
+
 /// The one handler for everything under the prefix.
 pub async fn handle(State(state): State<Arc<AppState>>, req: Request) -> Response<Body> {
     state.metrics.requests.fetch_add(1, Ordering::Relaxed);
@@ -659,8 +788,25 @@ pub async fn handle(State(state): State<Arc<AppState>>, req: Request) -> Respons
             );
             return r;
         }
+        "" if state.index.is_some() && !state.prefix.is_empty() => {
+            return redirect(format!("{}/", state.prefix));
+        }
+        "" | "/" | "/index.html" if state.index.is_some() => {
+            if let Some(r) = index_page(&state, req.headers(), method == Method::HEAD, "/").await {
+                return r;
+            }
+        }
         "" | "/" => return plain_page(StatusCode::NOT_FOUND, "no index page"),
         _ => {}
+    }
+    // assets of the index pages
+    if state.index.is_some() {
+        if let Some(asset) = rest
+            .strip_prefix('/')
+            .and_then(|n| state.assets.get(n.as_bytes()))
+        {
+            return asset_response(req.headers(), asset, method == Method::HEAD);
+        }
     }
     let (segs, _trailing) = match split_path(rest) {
         Ok(v) => v,
@@ -674,7 +820,14 @@ pub async fn handle(State(state): State<Arc<AppState>>, req: Request) -> Respons
         &segs,
         &raw,
         state.cfg.allow_git_paths,
-    ) else {
+        state.cfg.allow_bare_dirs(),
+    )
+    .filter(|r| !state.excluded(&r.repo)) else {
+        if state.index.is_some() {
+            if let Some(r) = index_page(&state, req.headers(), method == Method::HEAD, rest).await {
+                return r;
+            }
+        }
         return plain_page(StatusCode::NOT_FOUND, "repository not found");
     };
 
@@ -685,32 +838,10 @@ pub async fn handle(State(state): State<Arc<AppState>>, req: Request) -> Respons
     // per-repo assets
     if let [name] = resolved.page.as_slice() {
         if let Some(asset) = state.assets.get(name) {
-            if etag_matches(&req, &asset.etag) {
+            if etag_matches(req.headers(), &asset.etag) {
                 state.metrics.not_modified.fetch_add(1, Ordering::Relaxed);
-                let mut r = Response::new(Body::empty());
-                *r.status_mut() = StatusCode::NOT_MODIFIED;
-                r.headers_mut()
-                    .insert(header::ETAG, HeaderValue::from_str(&asset.etag).unwrap());
-                return r;
             }
-            let body = if method == Method::HEAD {
-                Body::empty()
-            } else {
-                Body::from(asset.body.clone())
-            };
-            let mut r = Response::new(body);
-            let h = r.headers_mut();
-            h.insert(
-                header::CONTENT_TYPE,
-                HeaderValue::from_static(asset.content_type),
-            );
-            h.insert(header::CONTENT_LENGTH, HeaderValue::from(asset.body.len()));
-            h.insert(header::ETAG, HeaderValue::from_str(&asset.etag).unwrap());
-            h.insert(
-                header::CACHE_CONTROL,
-                HeaderValue::from_static("public, max-age=86400"),
-            );
-            return r;
+            return asset_response(req.headers(), asset, method == Method::HEAD);
         }
     }
     let Some(page) = classify(&resolved.page, req.uri().query()) else {
@@ -763,7 +894,7 @@ pub async fn handle(State(state): State<Arc<AppState>>, req: Request) -> Respons
     };
 
     // phase 2: conditional request
-    if etag_matches(&req, &head.etag) {
+    if etag_matches(req.headers(), &head.etag) {
         state.metrics.not_modified.fetch_add(1, Ordering::Relaxed);
         let mut r = Response::new(Body::empty());
         *r.status_mut() = StatusCode::NOT_MODIFIED;

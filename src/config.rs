@@ -13,6 +13,8 @@ pub enum NameFrom {
     Dir,
     /// `<owner>/<slot>`; owner from the `owner` file or the directory two levels up.
     OwnerSlot,
+    /// The git directory's path below the root with `.git` stripped (`team/tool`).
+    Path,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -169,9 +171,66 @@ pub struct Config {
     /// Log level / filter (RUST_LOG syntax).
     #[arg(long, env = "STREAGIT_LOG_LEVEL", default_value = "info")]
     pub log_level: String,
+
+    /// File with `user:password` lines; enables HTTP basic auth (see README, Security).
+    #[arg(long, env = "STREAGIT_AUTH_FILE")]
+    pub auth_file: Option<PathBuf>,
+
+    /// From `STREAGIT_AUTH_USER` only (never a command line flag), see `Config::load_env`.
+    #[arg(skip)]
+    pub auth_user: Option<String>,
+
+    /// From `STREAGIT_AUTH_PASSWORD` only (never a command line flag).
+    #[arg(skip)]
+    pub auth_password: Option<Secret>,
+
+    /// Serve an overview of all repositories below the root at `<prefix>/`.
+    #[arg(long, env = "STREAGIT_INDEX", default_value_t = false, action = clap::ArgAction::Set)]
+    pub index: bool,
+
+    /// Directory levels below the root searched for repositories by the index.
+    #[arg(long, env = "STREAGIT_INDEX_DEPTH", default_value_t = 3)]
+    pub index_depth: usize,
+
+    /// How long the repository list of the index is reused before the root is walked again.
+    #[arg(long, env = "STREAGIT_INDEX_TTL", default_value = "60s", value_parser = parse_duration)]
+    pub index_ttl: Duration,
+
+    /// Serve bare repositories whose directory name does not end in `.git`
+    /// (default: the value of `--index`).
+    #[arg(long, env = "STREAGIT_ALLOW_BARE_DIRS", action = clap::ArgAction::Set)]
+    pub allow_bare_dirs: Option<bool>,
+
+    /// Path or glob below the root that is neither listed nor served (repeatable;
+    /// `STREAGIT_EXCLUDE` takes a comma-separated list).
+    #[arg(long, env = "STREAGIT_EXCLUDE", value_delimiter = ',')]
+    pub exclude: Vec<String>,
+}
+
+/// A string that is never printed (`Debug` shows `<redacted>`).
+#[derive(Clone, PartialEq, Eq)]
+pub struct Secret(pub String);
+
+impl std::fmt::Debug for Secret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("<redacted>")
+    }
 }
 
 impl Config {
+    /// Read the settings that only come from the environment
+    /// (`STREAGIT_AUTH_USER`, `STREAGIT_AUTH_PASSWORD`).
+    pub fn load_env(&mut self) {
+        let var = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
+        self.auth_user = var("STREAGIT_AUTH_USER");
+        self.auth_password = var("STREAGIT_AUTH_PASSWORD").map(Secret);
+    }
+
+    /// Whether suffix-less bare repository directories are served.
+    pub fn allow_bare_dirs(&self) -> bool {
+        self.allow_bare_dirs.unwrap_or(self.index)
+    }
+
     /// Effective number of render permits.
     pub fn render_threads(&self) -> usize {
         self.render_threads.unwrap_or_else(|| {

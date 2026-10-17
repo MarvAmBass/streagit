@@ -4,6 +4,8 @@
 # Builds stagit 1.3 against libgit2 in alpine:3, builds the fixture with
 # tests/fixtures/make_fixture.sh and runs stagit on the main fixture repo.
 # Output: tests/golden/fixture/{log.html,files.html,refs.html,atom.xml,tags.xml,commit/*,file/*}
+# and tests/golden/index.html (stagit-index on the root-level repos of
+# tests/fixtures/make_index_fixture.sh, newest first like streagit's --index).
 #
 # Usage: tests/golden/gen.sh [path-to-stagit-source]   (default: git clone git://git.codemadness.org/stagit)
 set -eu
@@ -28,6 +30,8 @@ docker run --rm -v "$REPO:/src" $MOUNT -w /src alpine:3 sh -eu -c '
 	# non-UTF-8 file name cannot be written onto every host filesystem
 	rm -f file/big.txt.html "file/$(printf "caf\351")".txt.html
 	cp -a /tmp/golden/. /src/tests/golden/fixture/
+	sh /src/tests/fixtures/make_index_fixture.sh /tmp/ix >/dev/null
+	cd /tmp/ix && /tmp/stagit/stagit-index c++ alpha beta.git > /src/tests/golden/index.html
 	echo "stagit version: $(cd /tmp/stagit && git describe --tags)"
 	echo "libgit2: $(apk info libgit2 2>/dev/null | head -1)"
 '

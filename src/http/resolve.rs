@@ -126,64 +126,99 @@ pub struct Resolved {
     pub base: String,
 }
 
+/// Whether `dir` looks like a bare repository: a `HEAD` file plus `objects/`
+/// and `refs/` directories (symlinks followed).
+pub fn is_bare_repo(dir: &Path) -> bool {
+    dir.join("HEAD").is_file() && dir.join("objects").is_dir() && dir.join("refs").is_dir()
+}
+
+/// A segment that may name a suffix-less bare repository directory.
+fn is_bare_dir_name(seg: &str) -> bool {
+    is_safe_name(seg) && !seg.starts_with('.') && !seg.ends_with(".git")
+}
+
 /// Resolve decoded segments against `root`. `raw_segments` are the original
 /// (encoded) segments, used to build redirect targets.
+///
+/// Candidates are tried right to left (the longest slot wins); per segment an
+/// `html*` name maps to its git dir, `<name>.git` names one directly (with
+/// `allow_git_paths`) and, with `allow_bare_dirs`, any other plain name that
+/// is itself a bare repository (and not inside one) does too.
 pub fn resolve(
     root: &Path,
     canonical_root: &Path,
     segs: &[Vec<u8>],
     raw_segments: &[&str],
     allow_git_paths: bool,
+    allow_bare_dirs: bool,
 ) -> Option<Resolved> {
     let strs: Vec<Option<&str>> = segs.iter().map(|s| std::str::from_utf8(s).ok()).collect();
-    // candidates right to left: the longest slot wins
     for i in (0..segs.len()).rev() {
         let Some(seg) = strs[i] else { continue };
-        let gitdir_name = match html_to_gitdir(seg) {
-            Some(g) => g,
-            None if allow_git_paths && is_git_dir_name(seg) => seg.to_string(),
-            None => continue,
+        let Some(prefix) = strs[..i].iter().copied().collect::<Option<Vec<&str>>>() else {
+            continue;
         };
+        let slot_rel = prefix.join("/");
         let mut slot = PathBuf::from(root);
-        let mut slot_rel = String::new();
-        let mut ok = true;
-        for s in &strs[..i] {
-            let Some(s) = s else {
-                ok = false;
-                break;
-            };
-            slot.push(s);
-            if !slot_rel.is_empty() {
-                slot_rel.push('/');
+        slot.extend(&prefix);
+        let mut candidates: Vec<(String, bool)> = Vec::with_capacity(2);
+        if let Some(g) = html_to_gitdir(seg) {
+            candidates.push((g, false));
+        }
+        if allow_git_paths && is_git_dir_name(seg) {
+            candidates.push((seg.to_string(), false));
+        }
+        if allow_bare_dirs && is_bare_dir_name(seg) {
+            candidates.push((seg.to_string(), true));
+        }
+        for (gitdir_name, bare_dir) in candidates {
+            let git_dir = slot.join(&gitdir_name);
+            if bare_dir {
+                // structure check, and never a directory inside another git dir
+                if !is_bare_repo(&git_dir) {
+                    continue;
+                }
+                let mut anc = PathBuf::from(root);
+                let mut nested = false;
+                for p in &prefix {
+                    anc.push(p);
+                    if is_bare_repo(&anc) {
+                        nested = true;
+                        break;
+                    }
+                }
+                if nested {
+                    continue;
+                }
+            } else if !git_dir.join("HEAD").is_file() {
+                continue;
             }
-            slot_rel.push_str(s);
+            let Ok(canon) = std::fs::canonicalize(&git_dir) else {
+                continue;
+            };
+            if !canon.starts_with(canonical_root) {
+                tracing::warn!(path = %git_dir.display(), "repository escapes the root; refused");
+                return None;
+            }
+            let base = raw_segments[..=i]
+                .iter()
+                .map(|s| format!("/{s}"))
+                .collect::<String>();
+            let rel = if slot_rel.is_empty() {
+                gitdir_name.clone()
+            } else {
+                format!("{slot_rel}/{gitdir_name}")
+            };
+            return Some(Resolved {
+                repo: RepoRef {
+                    git_dir: canon,
+                    slot: slot_rel,
+                    rel,
+                },
+                page: segs[i + 1..].to_vec(),
+                base,
+            });
         }
-        if !ok {
-            continue;
-        }
-        let git_dir = slot.join(&gitdir_name);
-        if !git_dir.join("HEAD").is_file() {
-            continue;
-        }
-        let Ok(canon) = std::fs::canonicalize(&git_dir) else {
-            continue;
-        };
-        if !canon.starts_with(canonical_root) {
-            tracing::warn!(path = %git_dir.display(), "repository escapes the root; refused");
-            return None;
-        }
-        let base = raw_segments[..=i]
-            .iter()
-            .map(|s| format!("/{s}"))
-            .collect::<String>();
-        return Some(Resolved {
-            repo: RepoRef {
-                git_dir: canon,
-                slot: slot_rel,
-            },
-            page: segs[i + 1..].to_vec(),
-            base,
-        });
     }
     None
 }
@@ -257,7 +292,7 @@ mod tests {
         let res = |p: &str| {
             let (segs, _) = split_path(p).unwrap();
             let raw: Vec<&str> = p.split('/').filter(|s| !s.is_empty()).collect();
-            resolve(&root, &croot, &segs, &raw, true)
+            resolve(&root, &croot, &segs, &raw, true, false)
         };
         let r = res("/gh/a/repos/b/html/log.html").unwrap();
         assert!(r.repo.git_dir.ends_with("gh/a/repos/b/repo.git"));
@@ -298,6 +333,62 @@ mod tests {
         // direct git paths can be disabled
         let (segs, _) = split_path("/gh/a/repos/b/repo.git/log.html").unwrap();
         let raw: Vec<&str> = ["gh", "a", "repos", "b", "repo.git", "log.html"].to_vec();
-        assert!(resolve(&root, &croot, &segs, &raw, false).is_none());
+        assert!(resolve(&root, &croot, &segs, &raw, false, false).is_none());
+        assert_eq!(
+            res("/gh/a/repos/b/repo.git/log.html").unwrap().repo.rel,
+            "gh/a/repos/b/repo.git"
+        );
+        assert_eq!(
+            res("/gh/a/repos/b/html/log.html").unwrap().repo.rel,
+            "gh/a/repos/b/repo.git"
+        );
+    }
+
+    #[test]
+    fn bare_dirs_without_git_suffix() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("root");
+        let mk = |p: &str| {
+            let d = root.join(p);
+            std::fs::create_dir_all(d.join("objects")).unwrap();
+            std::fs::create_dir_all(d.join("refs")).unwrap();
+            std::fs::write(d.join("HEAD"), "ref: refs/heads/main\n").unwrap();
+        };
+        mk("a/b.git");
+        mk("a/c");
+        mk("a/c/modules/sub"); // a git dir inside a git dir is never a repository
+        mk("top");
+        // HEAD alone is not enough for a suffix-less directory
+        std::fs::create_dir_all(root.join("a/notrepo")).unwrap();
+        std::fs::write(root.join("a/notrepo/HEAD"), "x").unwrap();
+        let outside = dir.path().join("outside");
+        mk("../outside");
+        std::os::unix::fs::symlink(&outside, root.join("a/evil")).unwrap();
+        let croot = std::fs::canonicalize(&root).unwrap();
+        let res = |p: &str, bare: bool| {
+            let (segs, _) = split_path(p).unwrap();
+            let raw: Vec<&str> = p.split('/').filter(|s| !s.is_empty()).collect();
+            resolve(&root, &croot, &segs, &raw, true, bare)
+        };
+        assert!(res("/a/c/log.html", false).is_none());
+        let r = res("/a/c/log.html", true).unwrap();
+        assert!(r.repo.git_dir.ends_with("a/c"));
+        assert_eq!((r.repo.slot.as_str(), r.repo.rel.as_str()), ("a", "a/c"));
+        assert_eq!(r.base, "/a/c");
+        let r = res("/a/c/file/x/y.html", true).unwrap();
+        assert!(r.repo.git_dir.ends_with("a/c"));
+        assert_eq!(r.page.len(), 3);
+        let r = res("/a/b.git/log.html", true).unwrap();
+        assert_eq!(r.repo.rel, "a/b.git");
+        assert_eq!(res("/top/refs.html", true).unwrap().repo.rel, "top");
+        assert!(res("/a/c/modules/sub/log.html", true)
+            .unwrap()
+            .repo
+            .git_dir
+            .ends_with("a/c"));
+        assert!(res("/a/notrepo/log.html", true).is_none());
+        assert!(res("/a/evil/log.html", true).is_none());
+        assert!(split_path("/a/%2e%2e/outside/log.html").is_err());
+        assert!(res("/a/log.html", true).is_none());
     }
 }
